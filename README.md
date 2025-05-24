@@ -1,4 +1,5 @@
 
+
 # Enhancing Pneumonia Detection from Chest X-ray Images using Image Preprocessing and Deep Learning
 
 ![Pneumonia Detection](assets/sample_images/pneumonia.jpg)
@@ -150,6 +151,10 @@ This research project is available for educational and research purposes. The co
 - The Chest X-Ray Images (Pneumonia) dataset providers
 - PyTorch and Streamlit communities
 - Contributors to the research and implementation 
+
+# Enhancing-Pneumonia-Detection-from-Chest-X-ray-Images-using-Image-Preprocessing-and-Deep-Learning
+Pneumonia detection from chest X-rays using image preprocessing and deep learning (ResNet18, transfer learning). Includes full training pipeline, preprocessing, and Streamlit web app. Based on research paper submitted for AI and DIP coursework.
+
 
 # Enhancing-Pneumonia-Detection-from-Chest-X-ray-Images-using-Image-Preprocessing-and-Deep-Learning
 Pneumonia detection from chest X-rays using image preprocessing and deep learning (ResNet18, transfer learning). Includes full training pipeline, preprocessing, and Streamlit web app. Based on research paper submitted for AI and DIP coursework.
