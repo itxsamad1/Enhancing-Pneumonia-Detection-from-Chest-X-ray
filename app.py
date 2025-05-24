@@ -7,6 +7,7 @@ import shutil
 import random
 from pathlib import Path
 import glob
+import gdown  # for Google Drive downloads
 
 # Configure minimal settings to reduce errors
 os.environ["STREAMLIT_LOGGER_LEVEL"] = "error"
@@ -42,11 +43,22 @@ logger = logging.getLogger(__name__)
 
 # Path constants
 MODEL_PATH = "pneumonia_resnet18.pt"  # Use the 100% accurate model
+MODEL_URL = "YOUR_GOOGLE_DRIVE_SHARE_URL"  # You'll need to add this
 SAMPLE_DIR = os.path.join(os.path.dirname(__file__), "assets", "sample_images")
 DATASET_DIR = os.path.join(os.path.dirname(__file__), "Chest X-Ray Images(Pneumonia)", "chest_xray")
 
 # Ensure the sample directory exists
 os.makedirs(SAMPLE_DIR, exist_ok=True)
+
+def download_model_if_needed():
+    if not os.path.exists(MODEL_PATH):
+        st.info("Downloading model file... Please wait.")
+        try:
+            gdown.download(MODEL_URL, MODEL_PATH, quiet=False)
+            st.success("Model downloaded successfully!")
+        except Exception as e:
+            st.error(f"Error downloading model: {str(e)}")
+            st.stop()
 
 def setup_sample_images(force_refresh=False):
     """Setup sample images from the dataset or provided files.
