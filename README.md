@@ -123,73 +123,8 @@ The app will be available at:
 ├── train_pneumonia.py          # Training pipeline
 ├── evaluate_pneumonia.py       # Model evaluation
 ├── predict_pneumonia.py        # Inference script
+├── pneumonia_detection_research_paper.docx  # Detailed research methodology and findings
 ├── assets/
 │   └── sample_images/         # Demo images
 └── dataset/                   # Dataset folder (not included)
 ```
-
----
-
-## 📊 Results & Impact
-
-### Model Performance
-- ✅ Training Accuracy: 98.7%
-- ✅ Validation Accuracy: 96.5%
-- ✅ Test Set Accuracy: 95.8%
-
-### Key Findings
-1. CLAHE preprocessing significantly improved model performance
-2. Grad-CAM visualization confirmed medically relevant features
-3. Model generalizes well across different X-ray sources
-
----
-
-## 🛠️ Technical Details
-
-### Dependencies
-- Python 3.8+
-- PyTorch 1.9+
-- Streamlit
-- OpenCV
-- NumPy
-- Matplotlib
-
-### Model Architecture
-- Base: ResNet-18
-- Modified final layer for binary classification
-- Trained with Adam optimizer
-- Cross-entropy loss function
-
----
-
-## 📚 Citation
-
-```bibtex
-@article{samad2024enhancing,
-    title={Enhancing Pneumonia Detection from Chest X-ray Images using Image Preprocessing and Deep Learning},
-    author={Abdul Samad},
-    year={2024},
-    institution={Research Project},
-    note={Undergraduate Research}
-}
-```
-
----
-
-## ⚖️ License
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
-
----
-
-## 🤝 Contact & Support
-
-- 👨‍💻 Author: Abdul Samad
-- 📧 GitHub: [@itxsamad1](https://github.com/itxsamad1)
-- 💬 Issues: Use the GitHub Issues tab for bugs/questions
-- 🌟 If this project helps you, please consider giving it a star!
-
----
-
-<div align="center">
-Made with ❤️ using PyTorch and Streamlit
-</div>
