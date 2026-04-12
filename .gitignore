@@ -36,10 +36,7 @@ ENV/
 *.swp
 *.swo
 
-# Model files (too large for git)
-*.pt
-*.pth
-*.h5
+
 
 # Logs
 *.log
@@ -49,8 +46,7 @@ ENV/
 .env.local
 .env.*.local
 
-# Graphs (generated during training)
-graphs/
+
 
 # Research paper
 *.docx

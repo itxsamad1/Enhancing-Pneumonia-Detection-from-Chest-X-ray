@@ -6,44 +6,38 @@
 [![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-green.svg)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-> **Branch: `augmentation`** — This branch implements offline dataset augmentation with class balancing and an improved training pipeline with 8 anti-overfitting approaches. Designed as a clean template for experimenting with different model architectures.
+This repository presents an end-to-end deep learning approach for pneumonia detection using chest X-ray images. It focuses heavily on dataset balancing, medically-valid offline dataset augmentation, and an explicitly anti-overfitting ResNet-18 architecture.
+
+A user-friendly **Streamlit** web app is provided for testing the model interactively with real-time interpretation mapping via Grad-CAM.
+
+<div align="center">
+<img src="assets/sample_images/normal.jpg" width="300" alt="Normal X-Ray"/>
+<img src="assets/sample_images/pneumonia.jpg" width="300" alt="Pneumonia X-Ray"/>
+</div>
 
 ---
 
-## 🎯 What's New in This Branch
+## 🎯 Architectural Techniques & Flow
 
-### Offline Dataset Augmentation (`augment_dataset.py`)
-- Expands the dataset from **5,856 → 31,339 images** (5.4× expansion)
-- **Class balancing**: Normal class gets 8× augmentation, Pneumonia gets 3× (ratio improved from 1:2.7 → 1:1.2)
-- **8 medically valid augmentation techniques**:
-  1. Horizontal Flip (lung symmetry)
-  2. Random Rotation ±15° (patient positioning)
-  3. Brightness Adjustment ±20% (exposure variation)
-  4. CLAHE Contrast Enhancement (machine sensor variation)
-  5. Gaussian Noise (quantum mottle / sensor noise)
-  6. Image Sharpening (edge enhancement)
-  7. Random Zoom (patient-to-plate distance)
-  8. Combined Augmentations (2-3 mixed techniques)
+The goal of this project phase is **generalization and preventing overfitting** on complex medical imaging data. 
 
-### Anti-Overfitting Training Pipeline (`train_pneumonia.py`)
-| Approach | Technique | Detail |
-|:---|:---|:---|
-| A | Offline Augmentation | Expanded dataset from `dataset_augmented/` |
-| B | Real-time Augmentation | RandomErasing, RandomAffine, ColorJitter |
-| C | Dropout | 0.3 rate in classifier head |
-| D | Weight Decay (L2) | 1e-4 regularization |
-| E | Early Stopping | Patience = 10 epochs |
-| F | LR Scheduling | CosineAnnealingWarmRestarts (T₀=10, T_mult=2) |
-| G | Gradient Clipping | max_norm = 1.0 |
-| H | Label Smoothing | 0.1 (softens hard targets) |
+### 1. The Dataset Pipeline Flow
+We implemented a robust two-stage augmentation pipeline to combat natural class imbalances (where pneumonia cases vastly outnumbered normal cases at 2.7:1).
+*   **Offline Augmentation**: The dataset was physically expanded from 5,856 images to **31,339 images**. 
+    *   To balance the dataset, the minority class (Normal) received **8x augmentation** while the majority class received **3x augmentation**, achieving a nearly perfect **1:1.2** balance.
+*   **Real-time Transforms**: As the model trains, images receive additional "on-the-fly" `RandomErasing`, `RandomAffine` shifts, and `ColorJitter`. This creates near-infinite variance.
+*   **Techniques applied**: Horizontal mirroring, ±15° rotation, bounding box zooming, Gaussian Noise (simulating poor sensor data), and CLAHE contrast adjustments.
 
-### GPU Optimization
-- Batch size: 64 (optimized for 16GB VRAM)
-- Mixed precision training (`torch.amp`)
-- `cudnn.benchmark` enabled
-- Persistent workers + pin_memory
-- Peak VRAM utilization tracking
-- Per-epoch overfitting gap indicator (🟢🟡🔴)
+### 2. Model Architecture
+We fine-tuned a **ResNet-18** network with structural overrides designed to restrict overfitting:
+*   **Modified Classifier Head**: We replaced the standard linear output layer with an `nn.Sequential` block containing aggressive **Dropout (30%)** to randomly zero out neurons, preventing the model from excessively memorizing pixel locations.
+*   **Label Smoothing**: Softens the typical one-hot vector (1.0 vs 0.0) into a (0.9 vs 0.1) confidence metric. This prevents the model from assigning 100% confidence to noisy medical images.
+
+### 3. Training Loop Regularization
+*   **Gradient Clipping**: Locked gradient norms at `1.0` to prevent "exploding gradients" which can disrupt convergence.
+*   **L2 Weight Decay**: Adds `1e-4` penalty to loss calculations for overly large weights.
+*   **Cosine Annealing with Warm Restarts**: Slowly decreases the learning rate but periodically "bounces" it back up over 10 epochs. This helps the optimizer escape local minimums.
+*   **Mixed Precision (AMP)**: Uses `torch.amp` to accelerate rendering on the RTX 5060 Ti GPU while massively cutting memory costs (Max GPU Mem: 0.94 GB / 15.9 GB utilized!).
 
 ---
 
@@ -63,39 +57,53 @@
 | Validation | 2,853 | 3,420 | 6,273 |
 | **Total** | **14,247** | **17,092** | **31,339** |
 
-> Class ratio improved from **1:2.7** to **1:1.2** after augmentation.
+---
+
+## 📈 Performance & Results
+
+The rigorous regularizations allowed us to hit peak detection efficiency extremely fast without memorizing noise. **Early Stopping triggered at Epoch 17** after recognizing peak performance was achieved at **Epoch 7**.
+
+### Best Epoch Metrics (Epoch 7)
+
+| Metric                  | Score     |
+|--------------------------|-----------|
+| **Validation Accuracy** | 97.91%    |
+| **Validation Loss**     | 0.2347    |
+| **Precision**           | 98.24%    |
+| **Recall**              | 97.92%    |
+| **F1 Score**            | 98.08%    |
+| **Specificity**         | 97.90%    |
+
+> 📌 **Overfitting Analysis**:
+> At peak performance (Epoch 7), the gap between Train Accuracy (97.88%) and Validation Accuracy (97.91%) was effectively `-0.0003`. **No overfitting was detected**, proving the regularized ResNet-18 architecture successfully mapped to real-world generalization parameters.
+
+> ✨ Our 9 training graphs, alongside the raw `training_history.json`, are stored in the `/graphs/` folder.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### Step 1: Prepare the Original Dataset
+### Windows Users
 ```bash
-# Download and prepare the raw Kaggle dataset
-python prepare_dataset.py
-```
+# Clone the repository
+git clone https://github.com/itxsamad1/Enhancing-Pneumonia-Detection-from-Chest-X-ray.git
 
-### Step 2: Run Augmentation
-```bash
-# Expand the dataset with augmentation + class balancing
-python augment_dataset.py
-```
-
-### Step 3: Train the Model
-```bash
-# Train ResNet-18 on the augmented dataset (30 epochs)
-python train_pneumonia.py
-```
-
-### Step 4: Run the Web App
-```bash
-# Launch the Streamlit interface
-streamlit run app.py
-```
-
-### Windows Users (Quick Launch)
-```bash
+# Execute via Batch Launcher
 .\run.bat
+```
+
+### Manual Setup (All Environments)
+```bash
+# 1. Provide an environment
+python -m venv venv
+.\venv\Scripts\activate   # Windows
+source venv/bin/activate  # UNIX
+
+# 2. Dependency Installations
+pip install -r requirements.txt
+
+# 3. Fire up Streamlit Inference App
+streamlit run app.py
 ```
 
 ---
@@ -104,80 +112,20 @@ streamlit run app.py
 
 ```
 .
-├── augment_dataset.py            # Offline augmentation pipeline (NEW)
-├── train_pneumonia.py            # Training pipeline (anti-overfitting)
-├── evaluate_pneumonia.py         # Model evaluation (classification report, ROC)
-├── predict_pneumonia.py          # Standalone inference script
-├── prepare_dataset.py            # Dataset preparation & merging
-├── download_datasets.py          # Automated dataset downloader (Kaggle API)
-├── app.py                        # Streamlit web interface with Grad-CAM
-├── run.bat                       # Windows launcher (venv + Streamlit)
-├── requirements.txt              # Python dependencies
+├── augment_dataset.py            # Offline augmentation & dataset balancing
+├── train_pneumonia.py            # Training pipeline (anti-overfitting configs)
+├── evaluate_pneumonia.py         # Model evaluation script
+├── predict_pneumonia.py          # Standalone python inference
+├── prepare_dataset.py            # Data fetching/organizing logic
+├── download_datasets.py          # Kaggle API integrations
+├── app.py                        # Streamlit web interface with interactive Grad-CAM
+├── run.bat                       # Windows environment automator
+├── pneumonia_resnet18.pt         # 97.91% Accuracy weights
 ├── assets/
-│   └── sample_images/            # Demo images for the web app
-├── dataset/                      # Original dataset (not in repo)
-└── dataset_augmented/            # Augmented dataset (not in repo)
+│   └── sample_images/            # Demo images
+├── graphs/                       # Auto-generated performance mappings
+└── dataset_augmented/            # The localized 31k+ images directory
 ```
-
-> **Note**: Model weights (`.pt`), training graphs (`graphs/`), datasets, and research paper files are excluded from this branch to keep it clean as a template for architecture experiments.
-
----
-
-## 📊 Training Configuration
-
-| Parameter               | Value                            |
-|:---|:---|
-| **Model** | ResNet-18 (ImageNet pre-trained) |
-| **Epochs** | 30 |
-| **Batch Size** | 64 |
-| **Initial Learning Rate** | 0.001 |
-| **Optimizer** | Adam (weight decay = 1e-4) |
-| **LR Scheduler** | CosineAnnealingWarmRestarts (T₀=10, T_mult=2) |
-| **Early Stopping** | Patience = 10 |
-| **Dropout** | 0.3 (classifier head) |
-| **Label Smoothing** | 0.1 |
-| **Gradient Clipping** | max_norm = 1.0 |
-| **Mixed Precision** | torch.amp (CUDA) |
-| **Loss Function** | CrossEntropyLoss |
-
----
-
-## 🛠️ Technical Details
-
-### Dependencies
-- Python 3.12+
-- PyTorch 2.7+ (CUDA 12.8)
-- Streamlit ≥ 1.30
-- OpenCV ≥ 4.8
-- NumPy ≥ 1.26
-- Matplotlib ≥ 3.8
-- scikit-learn ≥ 1.3
-- scikit-image ≥ 0.21
-- seaborn ≥ 0.13
-- tqdm ≥ 4.66
-
-### Model Architecture
-- **Base**: ResNet-18 (pre-trained on ImageNet)
-- **Modified**: Dropout(0.3) → Linear(512, 2) classifier head
-- **Optimizer**: Adam with weight decay (1e-4)
-- **Loss**: CrossEntropyLoss with label smoothing (0.1)
-- **Training**: 30 epochs with mixed precision (torch.amp)
-- **Inference**: Grad-CAM visualization for interpretability
-
-### Hardware
-- Tested on NVIDIA RTX 5060 Ti (Blackwell architecture, 16GB VRAM)
-- CUDA 12.8 with `sm_120` compute capability
-
----
-
-## 🔀 Using This Branch as a Template
-
-This branch is designed to be a **clean starting point** for training with different architectures. To try a new model:
-
-1. Modify `create_model()` in `train_pneumonia.py`
-2. Run `python augment_dataset.py` (if not already done)
-3. Run `python train_pneumonia.py`
-4. Results will be saved in `graphs/` and `pneumonia_resnet18.pt`
 
 ---
 
@@ -205,7 +153,6 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - 👨‍💻 Author: Abdul Samad
 - 📧 GitHub: [@itxsamad1](https://github.com/itxsamad1)
 - 💬 Issues: Use the GitHub Issues tab for bugs/questions
-- 🌟 If this project helps you, please consider giving it a star!
 
 ---
 

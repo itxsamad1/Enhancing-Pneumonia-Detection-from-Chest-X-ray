@@ -12,7 +12,11 @@ def load_model(model_path):
     # Create a ResNet18 model with 2 output classes
     model = resnet18(weights=None)
     num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 2)
+    # Match the architecture trained in train_pneumonia.py (includes Dropout)
+    model.fc = nn.Sequential(
+        nn.Dropout(p=0.3),
+        nn.Linear(num_ftrs, 2)
+    )
     
     # Load the trained weights
     model.load_state_dict(torch.load(model_path))
