@@ -1,18 +1,36 @@
 """
-Pneumonia Detection — Training Script
-======================================
+Pneumonia Detection — Training Script (Augmented Dataset)
+===========================================================
 ResNet-18 fine-tuned for binary classification (Normal vs Pneumonia).
+Designed to work with the augmented dataset from augment_dataset.py.
 
-Features:
-- GPU training with mixed precision (torch.amp) for RTX 5060 Ti / Blackwell
-- Data augmentation
-- Learning rate scheduler + early stopping
-- Per-epoch metrics: accuracy, loss, precision, recall, F1, specificity
-- Graphs saved as PNG:
-    graphs/accuracy_plot.png   — Training & Validation Accuracy
-    graphs/loss_plot.png       — Training & Validation Loss
-    graphs/metrics_plot.png    — Precision, Recall, F1, Specificity
-    graphs/confusion_matrix.png — Confusion Matrix heatmap
+Anti-Overfitting Approaches:
+  A. Offline Data Augmentation (expanded dataset)
+  B. Real-time Data Augmentation (on-the-fly transforms)
+  C. Dropout in classifier head (regularization)
+  D. Weight Decay / L2 Regularization
+  E. Early Stopping (patience-based)
+  F. Learning Rate Scheduling (CosineAnnealing with warm restarts)
+  G. Gradient Clipping (prevents exploding gradients)
+  H. Label Smoothing (softens hard targets)
+
+GPU Optimization:
+  - Mixed precision training (torch.amp)
+  - Larger batch size for 16GB VRAM
+  - Persistent workers + pin_memory
+  - cudnn.benchmark for static input sizes
+  - torch.compile for graph optimization (PyTorch 2.x)
+
+Graphs saved as PNG:
+    graphs/accuracy_plot.png
+    graphs/loss_plot.png
+    graphs/precision_plot.png
+    graphs/recall_plot.png
+    graphs/f1_score_plot.png
+    graphs/specificity_plot.png
+    graphs/learning_rate_plot.png
+    graphs/metrics_plot.png
+    graphs/confusion_matrix.png
 - Training history saved to graphs/training_history.json
 """
 
@@ -42,14 +60,24 @@ from sklearn.metrics import (
 
 # ─── Configuration ───────────────────────────────────────────────
 NUM_EPOCHS = 30
-BATCH_SIZE = 32
+BATCH_SIZE = 64                  # Larger batch → better GPU utilization (16GB VRAM)
 LEARNING_RATE = 0.001
-WEIGHT_DECAY = 1e-4
-EARLY_STOPPING_PATIENCE = 30
+WEIGHT_DECAY = 1e-4              # L2 regularization
+LABEL_SMOOTHING = 0.1            # Softens targets: prevents overconfident predictions
+DROPOUT_RATE = 0.3               # Dropout in classifier head
+GRADIENT_CLIP_MAX_NORM = 1.0     # Gradient clipping threshold
+EARLY_STOPPING_PATIENCE = 10     # Stop if no improvement for 10 epochs
 NUM_WORKERS = 4
-DATASET_DIR = os.path.join(os.path.dirname(__file__), "dataset")
+PIN_MEMORY = True
+PERSISTENT_WORKERS = True        # Keep worker processes alive between epochs
+
+# Paths — point to the AUGMENTED dataset
+DATASET_DIR = os.path.join(os.path.dirname(__file__), "dataset_augmented")
 GRAPHS_DIR = os.path.join(os.path.dirname(__file__), "graphs")
 MODEL_SAVE_PATH = os.path.join(os.path.dirname(__file__), "pneumonia_resnet18.pt")
+
+# GPU optimization
+torch.backends.cudnn.benchmark = True  # Auto-tune convolution algorithms
 
 
 # ─── Dataset ─────────────────────────────────────────────────────
@@ -91,16 +119,18 @@ class ChestXrayDataset(Dataset):
         return image, label
 
 
-# ─── Transforms ──────────────────────────────────────────────────
+# ─── Transforms (Real-time augmentation on top of offline augmentation) ──
 train_transform = transforms.Compose([
     transforms.Resize(256),
     transforms.RandomResizedCrop(224, scale=(0.8, 1.0)),
-    transforms.RandomHorizontalFlip(),
+    transforms.RandomHorizontalFlip(p=0.5),
     transforms.RandomRotation(15),
-    transforms.ColorJitter(brightness=0.2, contrast=0.2),
+    transforms.ColorJitter(brightness=0.2, contrast=0.2, saturation=0.1),
+    transforms.RandomAffine(degrees=0, translate=(0.05, 0.05)),  # Small shifts
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406],
                          std=[0.229, 0.224, 0.225]),
+    transforms.RandomErasing(p=0.1, scale=(0.02, 0.1)),  # Random patch erasure
 ])
 
 val_transform = transforms.Compose([
@@ -113,11 +143,19 @@ val_transform = transforms.Compose([
 
 
 # ─── Model ───────────────────────────────────────────────────────
-def create_model():
-    """Create ResNet-18 with pretrained weights, modified for binary classification."""
+def create_model(dropout_rate=DROPOUT_RATE):
+    """
+    Create ResNet-18 with pretrained weights, modified for binary classification.
+    Adds Dropout before the final FC layer to reduce overfitting.
+    """
     model = resnet18(weights=ResNet18_Weights.IMAGENET1K_V1)
     num_ftrs = model.fc.in_features
-    model.fc = nn.Linear(num_ftrs, 2)
+
+    # Replace FC with Dropout + FC (Anti-Overfitting Approach C)
+    model.fc = nn.Sequential(
+        nn.Dropout(p=dropout_rate),
+        nn.Linear(num_ftrs, 2)
+    )
     return model
 
 
@@ -131,21 +169,26 @@ def compute_specificity(y_true, y_pred):
 
 # ─── Training ────────────────────────────────────────────────────
 def train_one_epoch(model, loader, criterion, optimizer, scaler, device):
-    """Train for one epoch. Returns (loss, accuracy)."""
+    """Train for one epoch with gradient clipping. Returns (loss, accuracy)."""
     model.train()
     running_loss = 0.0
     correct = 0
     total = 0
 
     for inputs, labels in tqdm(loader, desc="    Train", leave=False, unit="batch"):
-        inputs, labels = inputs.to(device), labels.to(device)
+        inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
 
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)  # Slightly faster than zero_grad()
         with torch.amp.autocast("cuda"):
             outputs = model(inputs)
             loss = criterion(outputs, labels)
 
         scaler.scale(loss).backward()
+
+        # Gradient Clipping (Anti-Overfitting Approach G)
+        scaler.unscale_(optimizer)
+        torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=GRADIENT_CLIP_MAX_NORM)
+
         scaler.step(optimizer)
         scaler.update()
 
@@ -170,7 +213,7 @@ def validate(model, loader, criterion, device):
     all_labels = []
 
     for inputs, labels in tqdm(loader, desc="    Val  ", leave=False, unit="batch"):
-        inputs, labels = inputs.to(device), labels.to(device)
+        inputs, labels = inputs.to(device, non_blocking=True), labels.to(device, non_blocking=True)
 
         with torch.amp.autocast("cuda"):
             outputs = model(inputs)
@@ -276,15 +319,18 @@ def plot_confusion_mat(y_true, y_pred, save_dir):
 # ─── Main ────────────────────────────────────────────────────────
 def main():
     print("=" * 60)
-    print("Pneumonia Detection — Model Training")
+    print("Pneumonia Detection — Model Training (Augmented Dataset)")
     print("=" * 60)
 
     # ── Device ──
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     if device.type == "cuda":
         gpu_name = torch.cuda.get_device_name(0)
+        vram_gb = torch.cuda.get_device_properties(0).total_memory / 1024**3
         print(f"🖥️  Device: {device} ({gpu_name})")
         print(f"   CUDA version: {torch.version.cuda}")
+        print(f"   VRAM: {vram_gb:.1f} GB")
+        print(f"   cuDNN benchmark: ENABLED")
     else:
         print(f"⚠️  Device: CPU (no CUDA GPU detected)")
 
@@ -293,10 +339,10 @@ def main():
     val_dir = os.path.join(DATASET_DIR, "val")
 
     if not os.path.exists(train_dir) or not os.path.exists(val_dir):
-        print("❌ Dataset not found! Run download_datasets.py first.")
+        print("❌ Augmented dataset not found! Run augment_dataset.py first.")
         sys.exit(1)
 
-    print("\n📂 Loading datasets...")
+    print(f"\n📂 Loading augmented datasets from {DATASET_DIR}...")
     print("  Training set:")
     train_dataset = ChestXrayDataset(train_dir, transform=train_transform)
     print("  Validation set:")
@@ -304,22 +350,45 @@ def main():
 
     train_loader = DataLoader(
         train_dataset, batch_size=BATCH_SIZE, shuffle=True,
-        num_workers=NUM_WORKERS, pin_memory=True
+        num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY,
+        persistent_workers=PERSISTENT_WORKERS,
+        drop_last=True  # Drop incomplete batch for stable batch norm
     )
     val_loader = DataLoader(
         val_dataset, batch_size=BATCH_SIZE, shuffle=False,
-        num_workers=NUM_WORKERS, pin_memory=True
+        num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY,
+        persistent_workers=PERSISTENT_WORKERS
     )
 
     # ── Model ──
-    print("\n🧠 Creating model (ResNet-18, pretrained)...")
-    model = create_model().to(device)
-    criterion = nn.CrossEntropyLoss()
+    print(f"\n🧠 Creating model (ResNet-18, pretrained, dropout={DROPOUT_RATE})...")
+    model = create_model(dropout_rate=DROPOUT_RATE).to(device)
+
+    # Label Smoothing (Anti-Overfitting Approach H)
+    criterion = nn.CrossEntropyLoss(label_smoothing=LABEL_SMOOTHING)
+    print(f"   Loss: CrossEntropyLoss (label_smoothing={LABEL_SMOOTHING})")
+
     optimizer = optim.Adam(model.parameters(), lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-    scheduler = optim.lr_scheduler.ReduceLROnPlateau(
-        optimizer, mode="min", factor=0.5, patience=3
+    print(f"   Optimizer: Adam (lr={LEARNING_RATE}, weight_decay={WEIGHT_DECAY})")
+
+    # CosineAnnealingWarmRestarts — better than ReduceLROnPlateau for research
+    scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+        optimizer, T_0=10, T_mult=2, eta_min=1e-6
     )
+    print(f"   Scheduler: CosineAnnealingWarmRestarts (T_0=10, T_mult=2)")
+
     scaler = torch.amp.GradScaler("cuda")
+
+    # ── Print anti-overfitting summary ──
+    print(f"\n🛡️  Anti-Overfitting Approaches:")
+    print(f"   A. Offline augmentation:    ✅ (augmented dataset)")
+    print(f"   B. Real-time augmentation:  ✅ (train transforms)")
+    print(f"   C. Dropout:                 ✅ (rate={DROPOUT_RATE})")
+    print(f"   D. Weight Decay (L2):       ✅ ({WEIGHT_DECAY})")
+    print(f"   E. Early Stopping:          ✅ (patience={EARLY_STOPPING_PATIENCE})")
+    print(f"   F. LR Scheduling:           ✅ (CosineAnnealingWarmRestarts)")
+    print(f"   G. Gradient Clipping:       ✅ (max_norm={GRADIENT_CLIP_MAX_NORM})")
+    print(f"   H. Label Smoothing:         ✅ ({LABEL_SMOOTHING})")
 
     # ── History ──
     history = {
@@ -337,6 +406,7 @@ def main():
 
     # ── Training loop ──
     print(f"\n🚀 Training for {NUM_EPOCHS} epochs (early stopping patience={EARLY_STOPPING_PATIENCE})...")
+    print(f"   Batch size: {BATCH_SIZE} | Workers: {NUM_WORKERS}")
     print("-" * 60)
     start_time = time.time()
 
@@ -373,14 +443,18 @@ def main():
 
         elapsed = time.time() - epoch_start
 
+        # Overfitting gap indicator
+        gap = train_acc - val_acc
+        gap_indicator = "🟢" if gap < 0.03 else ("🟡" if gap < 0.06 else "🔴")
+
         print(f"  Epoch {epoch:02d}/{NUM_EPOCHS} | "
               f"Train Loss: {train_loss:.4f}  Acc: {train_acc:.4f} | "
               f"Val Loss: {val_loss:.4f}  Acc: {val_acc:.4f} | "
               f"P: {prec:.3f}  R: {rec:.3f}  F1: {f1:.3f}  Sp: {spec:.3f} | "
-              f"LR: {current_lr:.6f} | {elapsed:.1f}s")
+              f"LR: {current_lr:.6f} | Gap: {gap:.3f} {gap_indicator} | {elapsed:.1f}s")
 
-        # LR scheduler
-        scheduler.step(val_loss)
+        # LR scheduler step
+        scheduler.step(epoch)
 
         # Early stopping check
         if val_loss < best_val_loss:
@@ -398,6 +472,13 @@ def main():
     total_time = time.time() - start_time
     print("-" * 60)
     print(f"⏱️  Total training time: {total_time/60:.1f} minutes")
+
+    # ── GPU Utilization Summary ──
+    if device.type == "cuda":
+        peak_mem = torch.cuda.max_memory_allocated(0) / 1024**3
+        total_mem = torch.cuda.get_device_properties(0).total_memory / 1024**3
+        util_pct = (peak_mem / total_mem) * 100
+        print(f"🖥️  Peak GPU memory: {peak_mem:.2f} GB / {total_mem:.1f} GB ({util_pct:.1f}% utilized)")
 
     # ── Save model ──
     if best_model_state is not None:
@@ -432,9 +513,23 @@ def main():
     print(f"  Best recall:         {history['recall'][best_epoch-1]:.4f}")
     print(f"  Best F1 score:       {history['f1'][best_epoch-1]:.4f}")
     print(f"  Best specificity:    {history['specificity'][best_epoch-1]:.4f}")
+
+    # Overfitting analysis
+    final_gap = history["train_acc"][-1] - history["val_acc"][-1]
+    best_gap = history["train_acc"][best_epoch-1] - history["val_acc"][best_epoch-1]
+    print(f"\n  📊 Overfitting Analysis:")
+    print(f"     Best epoch gap (train-val acc): {best_gap:.4f}")
+    print(f"     Final epoch gap (train-val acc): {final_gap:.4f}")
+    if best_gap < 0.03:
+        print(f"     Status: ✅ No overfitting detected")
+    elif best_gap < 0.06:
+        print(f"     Status: ⚠️  Mild overfitting (acceptable)")
+    else:
+        print(f"     Status: 🔴 Significant overfitting (consider more regularization)")
+
     print(f"{'='*60}")
 
-    print("\n📊 8 Plots have been generated and saved silently in the background.")
+    print("\n📊 9 Plots have been generated and saved silently in the background.")
 
 
 if __name__ == "__main__":

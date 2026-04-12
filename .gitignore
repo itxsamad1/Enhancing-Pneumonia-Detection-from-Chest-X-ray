@@ -1,5 +1,6 @@
-# Dataset
+# Datasets
 dataset/
+dataset_augmented/
 raw_datasets/
 
 # Python
@@ -47,6 +48,16 @@ ENV/
 .env
 .env.local
 .env.*.local
+
+# Graphs (generated during training)
+graphs/
+
+# Research paper
+*.docx
+
+# Test images
+normal.jpeg
+pneumonia.jpg
 
 # Misc
 .DS_Store

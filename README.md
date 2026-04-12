@@ -6,115 +6,97 @@
 [![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-green.svg)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This repository presents an end-to-end deep learning project for pneumonia detection using chest X-ray images. We leverage preprocessing techniques to enhance medical image quality, use a fine-tuned **ResNet-18** model (30 epochs) for binary classification, and integrate **Grad-CAM** for interpretability. A user-friendly **Streamlit** web app is provided for testing the model interactively.
-
-<div align="center">
-<img src="assets/sample_images/normal.jpg" width="300" alt="Normal X-Ray"/>
-<img src="assets/sample_images/pneumonia.jpg" width="300" alt="Pneumonia X-Ray"/>
-</div>
+> **Branch: `augmentation`** — This branch implements offline dataset augmentation with class balancing and an improved training pipeline with 8 anti-overfitting approaches. Designed as a clean template for experimenting with different model architectures.
 
 ---
 
-## 🎯 Key Features
+## 🎯 What's New in This Branch
 
-- 🖼️ **Advanced Image Preprocessing**
-  - CLAHE (Contrast Limited Adaptive Histogram Equalization)
-  - Histogram Equalization
-  - Denoising (Non-Local Means)
-  - Image Sharpening
-- 🧠 **Deep Learning Model**
-  - ResNet-18 architecture (ImageNet pre-trained)
-  - Transfer learning with 30 epochs of fine-tuning
-  - Mixed precision training (`torch.amp`) for GPU acceleration
-  - Learning rate scheduling (ReduceLROnPlateau) + early stopping
-- 🔍 **Visualization & Interpretability**
-  - Grad-CAM heatmaps for model attention
-  - Interactive Streamlit web interface
-  - Real-time predictions with confidence scores
-- 📊 **Comprehensive Training Analytics**
-  - 9 performance graphs generated automatically
-  - Per-epoch metrics: Accuracy, Loss, Precision, Recall, F1, Specificity, Learning Rate
-  - Confusion matrix heatmap
-  - Full training history saved as JSON
+### Offline Dataset Augmentation (`augment_dataset.py`)
+- Expands the dataset from **5,856 → 31,339 images** (5.4× expansion)
+- **Class balancing**: Normal class gets 8× augmentation, Pneumonia gets 3× (ratio improved from 1:2.7 → 1:1.2)
+- **8 medically valid augmentation techniques**:
+  1. Horizontal Flip (lung symmetry)
+  2. Random Rotation ±15° (patient positioning)
+  3. Brightness Adjustment ±20% (exposure variation)
+  4. CLAHE Contrast Enhancement (machine sensor variation)
+  5. Gaussian Noise (quantum mottle / sensor noise)
+  6. Image Sharpening (edge enhancement)
+  7. Random Zoom (patient-to-plate distance)
+  8. Combined Augmentations (2-3 mixed techniques)
+
+### Anti-Overfitting Training Pipeline (`train_pneumonia.py`)
+| Approach | Technique | Detail |
+|:---|:---|:---|
+| A | Offline Augmentation | Expanded dataset from `dataset_augmented/` |
+| B | Real-time Augmentation | RandomErasing, RandomAffine, ColorJitter |
+| C | Dropout | 0.3 rate in classifier head |
+| D | Weight Decay (L2) | 1e-4 regularization |
+| E | Early Stopping | Patience = 10 epochs |
+| F | LR Scheduling | CosineAnnealingWarmRestarts (T₀=10, T_mult=2) |
+| G | Gradient Clipping | max_norm = 1.0 |
+| H | Label Smoothing | 0.1 (softens hard targets) |
+
+### GPU Optimization
+- Batch size: 64 (optimized for 16GB VRAM)
+- Mixed precision training (`torch.amp`)
+- `cudnn.benchmark` enabled
+- Persistent workers + pin_memory
+- Peak VRAM utilization tracking
+- Per-epoch overfitting gap indicator (🟢🟡🔴)
 
 ---
 
-## 📖 Abstract
+## 📂 Dataset Statistics
 
-Pneumonia is a serious lung infection that must be diagnosed early for effective treatment. In this research, we explore how image preprocessing methods like contrast enhancement, denoising, and sharpening can improve deep learning model accuracy. Using transfer learning on ResNet-18 trained for **30 epochs** with mixed precision, and visualizing model attention through Grad-CAM, we achieve strong pneumonia detection performance on chest X-ray datasets. A lightweight web app interface demonstrates the practical utility of this system.
+### Original Dataset (5,856 images)
+| Split | Normal | Pneumonia | Total |
+|:---|:---|:---|:---|
+| Training | 1,266 | 3,418 | 4,684 |
+| Validation | 317 | 855 | 1,172 |
+| **Total** | **1,583** | **4,273** | **5,856** |
 
----
+### Augmented Dataset (31,339 images)
+| Split | Normal | Pneumonia | Total |
+|:---|:---|:---|:---|
+| Training | 11,394 | 13,672 | 25,066 |
+| Validation | 2,853 | 3,420 | 6,273 |
+| **Total** | **14,247** | **17,092** | **31,339** |
 
-## 📂 Dataset Overview
-
-We utilized three comprehensive datasets to ensure robust model training and validation:
-
-### 1. Chest X-Ray Images (Pneumonia) – Kaggle
-- 📁 Training Set:
-  - Normal: 1,341 images
-  - Pneumonia: 3,875 images
-- 📁 Validation & Test Sets:
-  - Proportionally split
-
-### 2. NIH ChestX-ray14
-- 📁 Total: 112,000+ images
-- 14 disease classes
-- Used: Pneumonia cases
-
-### 3. ChestXpert-v1.0-small
-- 📁 Filtered subset
-- Normal & Pneumonia cases
-- High-quality scans
-
-📦 **Dataset Organization**:
-```
-/dataset/
-├── chest_xray/
-│   ├── train/
-│   ├── test/
-│   └── val/
-├── chestxray14/
-└── chestxpert-v1.0-small/
-```
-
-> 📝 Note: Due to size constraints, datasets are not included in the repository. Please download and place them in a `/dataset/` folder.
+> Class ratio improved from **1:2.7** to **1:1.2** after augmentation.
 
 ---
 
 ## 🚀 Quick Start Guide
 
-### Windows Users (Recommended)
+### Step 1: Prepare the Original Dataset
 ```bash
-# 1. Clone the repository
-git clone https://github.com/itxsamad1/Enhancing-Pneumonia-Detection-from-Chest-X-ray.git
-
-# 2. Double-click run.bat
-# OR
-# Run from command line:
-.\run.bat
+# Download and prepare the raw Kaggle dataset
+python prepare_dataset.py
 ```
 
-### Manual Setup (All Platforms)
+### Step 2: Run Augmentation
 ```bash
-# 1. Create virtual environment
-python -m venv venv
+# Expand the dataset with augmentation + class balancing
+python augment_dataset.py
+```
 
-# 2. Activate environment
-# Windows:
-.\venv\Scripts\activate
-# Unix/macOS:
-source venv/bin/activate
+### Step 3: Train the Model
+```bash
+# Train ResNet-18 on the augmented dataset (30 epochs)
+python train_pneumonia.py
+```
 
-# 3. Install dependencies
-pip install -r requirements.txt
-
-# 4. Run the application
+### Step 4: Run the Web App
+```bash
+# Launch the Streamlit interface
 streamlit run app.py
 ```
 
-The app will be available at:
-- 🌐 Local URL: http://localhost:8501
-- 🔗 Network URL: http://[your-ip]:8501
+### Windows Users (Quick Launch)
+```bash
+.\run.bat
+```
 
 ---
 
@@ -122,101 +104,41 @@ The app will be available at:
 
 ```
 .
-├── app.py                        # Streamlit web interface with Grad-CAM
-├── train_pneumonia.py            # Training pipeline (30 epochs, mixed precision)
+├── augment_dataset.py            # Offline augmentation pipeline (NEW)
+├── train_pneumonia.py            # Training pipeline (anti-overfitting)
 ├── evaluate_pneumonia.py         # Model evaluation (classification report, ROC)
 ├── predict_pneumonia.py          # Standalone inference script
 ├── prepare_dataset.py            # Dataset preparation & merging
 ├── download_datasets.py          # Automated dataset downloader (Kaggle API)
+├── app.py                        # Streamlit web interface with Grad-CAM
 ├── run.bat                       # Windows launcher (venv + Streamlit)
 ├── requirements.txt              # Python dependencies
-├── pneumonia_resnet18.pt         # Trained model weights (not in repo)
 ├── assets/
 │   └── sample_images/            # Demo images for the web app
-├── graphs/                       # Training performance graphs
-│   ├── accuracy_plot.png         # Training & Validation Accuracy
-│   ├── loss_plot.png             # Training & Validation Loss
-│   ├── precision_plot.png        # Precision over Epochs
-│   ├── recall_plot.png           # Recall over Epochs
-│   ├── f1_score_plot.png         # F1 Score over Epochs
-│   ├── specificity_plot.png      # Specificity over Epochs
-│   ├── learning_rate_plot.png    # Learning Rate Schedule
-│   ├── metrics_plot.png          # Combined Metrics
-│   ├── confusion_matrix.png      # Confusion Matrix Heatmap
-│   └── training_history.json     # Raw per-epoch metrics (JSON)
-└── dataset/                      # Dataset folder (not included)
+├── dataset/                      # Original dataset (not in repo)
+└── dataset_augmented/            # Augmented dataset (not in repo)
 ```
+
+> **Note**: Model weights (`.pt`), training graphs (`graphs/`), datasets, and research paper files are excluded from this branch to keep it clean as a template for architecture experiments.
 
 ---
 
 ## 📊 Training Configuration
 
 | Parameter               | Value                            |
-|--------------------------|----------------------------------|
-| **Model**               | ResNet-18 (ImageNet pre-trained) |
-| **Epochs**              | 30                               |
-| **Batch Size**          | 32                               |
-| **Initial Learning Rate** | 0.001                         |
-| **Optimizer**           | Adam (weight decay = 1e-4)       |
-| **LR Scheduler**        | ReduceLROnPlateau (factor=0.5, patience=3) |
-| **Early Stopping**      | Patience = 30                    |
-| **Mixed Precision**     | torch.amp (CUDA)                 |
-| **Loss Function**       | CrossEntropyLoss                 |
-| **Data Augmentation**   | RandomResizedCrop, HorizontalFlip, Rotation(15°), ColorJitter |
-
----
-
-## 📈 Results & Performance
-
-### Best Epoch Metrics (Epoch 9 — Lowest Validation Loss)
-
-| Metric                  | Value     |
-|--------------------------|-----------|
-| **Training Accuracy**   | 95.87%    |
-| **Validation Accuracy** | 96.16%    |
-| **Training Loss**       | 0.1174    |
-| **Validation Loss**     | 0.0946    |
-| **Precision**           | 96.98%    |
-| **Recall**              | 97.78%    |
-| **F1 Score**            | 97.38%    |
-| **Specificity**         | 91.80%    |
-
-### Final Epoch Metrics (Epoch 30)
-
-| Metric                  | Value     |
-|--------------------------|-----------|
-| **Training Accuracy**   | 99.06%    |
-| **Validation Accuracy** | 94.80%    |
-| **Training Loss**       | 0.0240    |
-| **Validation Loss**     | 0.1868    |
-| **Precision**           | 93.53%    |
-| **Recall**              | 99.77%    |
-| **F1 Score**            | 96.55%    |
-| **Specificity**         | 81.39%    |
-
-### Training Graphs
-
-The following performance graphs are generated and saved in the `graphs/` directory:
-
-| # | Graph                        | Description                        |
-|---|------------------------------|------------------------------------|
-| 1 | `accuracy_plot.png`          | Training & Validation Accuracy     |
-| 2 | `loss_plot.png`              | Training & Validation Loss         |
-| 3 | `precision_plot.png`         | Precision over Epochs              |
-| 4 | `recall_plot.png`            | Recall over Epochs                 |
-| 5 | `f1_score_plot.png`          | F1 Score over Epochs               |
-| 6 | `specificity_plot.png`       | Specificity over Epochs            |
-| 7 | `learning_rate_plot.png`     | Learning Rate Schedule             |
-| 8 | `metrics_plot.png`           | Combined Metrics                   |
-| 9 | `confusion_matrix.png`       | Confusion Matrix Heatmap           |
-
-### Key Findings
-
-1. **CLAHE preprocessing** significantly improved model performance on low-contrast X-rays
-2. **Image Sharpening** enhanced edge detection for identifying pneumonia patterns
-3. **Grad-CAM visualization** confirmed the model focuses on medically relevant lung regions
-4. Model generalizes well across different X-ray sources
-5. Learning rate was reduced 5 times via scheduler (1e-3 → 3.125e-5)
+|:---|:---|
+| **Model** | ResNet-18 (ImageNet pre-trained) |
+| **Epochs** | 30 |
+| **Batch Size** | 64 |
+| **Initial Learning Rate** | 0.001 |
+| **Optimizer** | Adam (weight decay = 1e-4) |
+| **LR Scheduler** | CosineAnnealingWarmRestarts (T₀=10, T_mult=2) |
+| **Early Stopping** | Patience = 10 |
+| **Dropout** | 0.3 (classifier head) |
+| **Label Smoothing** | 0.1 |
+| **Gradient Clipping** | max_norm = 1.0 |
+| **Mixed Precision** | torch.amp (CUDA) |
+| **Loss Function** | CrossEntropyLoss |
 
 ---
 
@@ -236,15 +158,26 @@ The following performance graphs are generated and saved in the `graphs/` direct
 
 ### Model Architecture
 - **Base**: ResNet-18 (pre-trained on ImageNet)
-- **Modified**: Final fully-connected layer → 2 output classes (Normal, Pneumonia)
+- **Modified**: Dropout(0.3) → Linear(512, 2) classifier head
 - **Optimizer**: Adam with weight decay (1e-4)
-- **Loss**: CrossEntropyLoss
+- **Loss**: CrossEntropyLoss with label smoothing (0.1)
 - **Training**: 30 epochs with mixed precision (torch.amp)
 - **Inference**: Grad-CAM visualization for interpretability
 
 ### Hardware
-- Tested on NVIDIA RTX 5060 Ti (Blackwell architecture)
+- Tested on NVIDIA RTX 5060 Ti (Blackwell architecture, 16GB VRAM)
 - CUDA 12.8 with `sm_120` compute capability
+
+---
+
+## 🔀 Using This Branch as a Template
+
+This branch is designed to be a **clean starting point** for training with different architectures. To try a new model:
+
+1. Modify `create_model()` in `train_pneumonia.py`
+2. Run `python augment_dataset.py` (if not already done)
+3. Run `python train_pneumonia.py`
+4. Results will be saved in `graphs/` and `pneumonia_resnet18.pt`
 
 ---
 
