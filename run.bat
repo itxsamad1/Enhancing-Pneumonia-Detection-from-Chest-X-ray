@@ -6,16 +6,16 @@ echo.
 REM Check if Python is installed
 where python >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo Python is not installed or not in PATH. Please install Python 3.7 or newer.
+    echo Python is not installed or not in PATH. Please install Python 3.10 or newer.
     echo You can download Python from https://www.python.org/downloads/
     pause
     exit /b 1
 )
 
-REM Check Python version (must be 3.7+)
-python -c "import sys; exit(0 if sys.version_info >= (3,7) else 1)" >nul 2>nul
+REM Check Python version (must be 3.10+)
+python -c "import sys; exit(0 if sys.version_info >= (3,10) else 1)" >nul 2>nul
 if %ERRORLEVEL% NEQ 0 (
-    echo Your Python version is too old. Please install Python 3.7 or newer.
+    echo Your Python version is too old. Please install Python 3.10 or newer.
     echo You can download Python from https://www.python.org/downloads/
     pause
     exit /b 1
@@ -37,7 +37,7 @@ if not exist "venv" (
     echo Creating virtual environment...
     python -m venv venv
     if %ERRORLEVEL% NEQ 0 (
-        echo Failed to create virtual environment. Please check your Python installation.
+        echo Failed to create virtual environment.
         pause
         exit /b 1
     )
@@ -46,29 +46,26 @@ if not exist "venv" (
 REM Activate virtual environment
 call venv\Scripts\activate.bat
 
-REM Check if pip is installed in the virtual environment
-where pip >nul 2>nul
-if %ERRORLEVEL% NEQ 0 (
-    echo Pip not found in virtual environment. Attempting to install...
-    python -m ensurepip --upgrade
-    if %ERRORLEVEL% NEQ 0 (
-        echo Failed to install pip. Please check your Python installation.
-        pause
-        exit /b 1
-    )
-)
-
 REM Install/update pip
 echo Updating pip...
 python -m pip install --upgrade pip
 
-REM Install requirements
-echo Installing dependencies...
+REM Install PyTorch with CUDA 12.8 (for NVIDIA Blackwell / RTX 50-series GPUs)
+echo Installing PyTorch with CUDA 12.8 support...
+pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+if %ERRORLEVEL% NEQ 0 (
+    echo.
+    echo Warning: PyTorch installation failed.
+    echo Please install manually: pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cu128
+    pause >nul
+)
+
+REM Install other requirements
+echo Installing other dependencies...
 pip install -r requirements.txt
 if %ERRORLEVEL% NEQ 0 (
     echo.
     echo Warning: Some dependencies failed to install.
-    echo The application might still work if core dependencies are installed.
     echo Press any key to continue anyway...
     pause >nul
 )
@@ -76,8 +73,8 @@ if %ERRORLEVEL% NEQ 0 (
 REM Check for model file
 if not exist "pneumonia_resnet18.pt" (
     echo.
-    echo Warning: Model file "pneumonia_resnet18.pt" not found. 
-    echo The application will run in demo mode.
+    echo Warning: Model file "pneumonia_resnet18.pt" not found.
+    echo Please run train_pneumonia.py first to train the model.
     echo.
     timeout /t 5
 )
@@ -95,4 +92,4 @@ streamlit run app.py
 REM Deactivate virtual environment when done
 call venv\Scripts\deactivate.bat
 
-pause 
+pause

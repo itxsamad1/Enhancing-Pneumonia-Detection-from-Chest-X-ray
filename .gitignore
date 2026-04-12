@@ -1,5 +1,6 @@
 # Dataset
 dataset/
+raw_datasets/
 
 # Python
 __pycache__/
@@ -34,7 +35,8 @@ ENV/
 *.swp
 *.swo
 
-# Model files
+# Model files (too large for git)
+*.pt
 *.pth
 *.h5
 
@@ -48,4 +50,4 @@ ENV/
 
 # Misc
 .DS_Store
-Thumbs.db 
+Thumbs.db
