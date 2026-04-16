@@ -1,4 +1,4 @@
-# 🫁 MobileNetV3 Pneumonia Detection (RP1 Baseline)
+# 🫁 EfficientNet-B0 Pneumonia Detection (RP1 Baseline)
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](http://localhost:8501)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -6,11 +6,11 @@
 [![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76B900.svg?style=flat&logo=NVIDIA&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This branch (`MobileNetV3-30epochs-patience-RP1`) forms the official MobileNetV3 baseline for Research Paper 1 (RP1). 
+This branch (`EfficientNetB0-30epochs-patience-RP1`) forms the official EfficientNet-B0 baseline for Research Paper 1 (RP1). 
 
 ## 🎯 Architecture Configuration
-- **Model**: MobileNetV3 Small (ImageNet fine-tuned)
-- **Classifier Head**: Replaced standard classifier with `nn.Sequential(nn.Dropout(0.3), nn.Linear(576, 2))`
+- **Model**: EfficientNet-B0 (ImageNet fine-tuned)
+- **Classifier Head**: Replaced standard classifier with `nn.Sequential(nn.Dropout(0.3), nn.Linear(1280, 2))`
 - **Dataset**: Original Kaggle dataset (5,856 images). **No offline augmentation was applied** to preserve a clean baseline for direct architectural comparison.
 - **Transforms**: Resize, CenterCrop, RandomHorizontalFlip(p=0.5), RandomRotation(15), ColorJitter, Normalization.
 
@@ -24,21 +24,21 @@ To ensure scientific consistency for the research paper, this model was trained 
 - **Hardware**: NVIDIA RTX 5060 Ti
 
 ## 📈 Performance & Results
-Training actively prevented overfitting via Early Stopping and Dropout. MobileNetV3 natively achieved the highest computational efficiency-to-accuracy ratio of the entire evaluation set.
+Training actively prevented overfitting via Early Stopping and Dropout. EfficientNet-B0 achieved the highest overall diagnostic performance out of all 5 evaluated architectures in the RP1 baseline study.
 
 **Training Status:**
 - Expected Epochs: 30
-- **Actual Epochs Run**: 13 (Early stopping triggered automatically)
-- **Best Performing Epoch**: **Epoch 8**
+- **Actual Epochs Run**: 10 (Early stopping triggered automatically)
+- **Best Performing Epoch**: **Epoch 5**
 
-### Best Epoch Metrics (Epoch 8)
+### Best Epoch Metrics (Epoch 5)
 | Metric                  | Score     |
 |--------------------------|-----------|
-| **Validation Accuracy** | 96.08%    |
-| **Validation Loss**     | 0.1086    |
-| **F1 Score**            | 97.36%    |
+| **Validation Accuracy** | 96.93%    |
+| **Validation Loss**     | 0.0815    |
+| **F1 Score**            | 97.92%    |
 
-> ✨ All 9 performance tracking graphs generated during this run are saved in the `graphs/` folder, and the final 96.08% accuracy model weights are stored in `pneumonia_mobilenetv3.pt`.
+> ✨ All 9 performance tracking graphs generated during this run are saved in the `graphs/` folder, and the final 96.93% accuracy model weights are stored in `pneumonia_efficientnet_b0.pt`.
 
 ---
 
