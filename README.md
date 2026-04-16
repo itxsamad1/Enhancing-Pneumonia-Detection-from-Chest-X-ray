@@ -3,6 +3,8 @@
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](http://localhost:8501)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![PyTorch](https://img.shields.io/badge/PyTorch-%23EE4C2C.svg?style=flat&logo=PyTorch&logoColor=white)](https://pytorch.org/)
+[![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76B900.svg?style=flat&logo=NVIDIA&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 This branch (`Resnet18-30epochs-patience-RP1`) forms the official ResNet-18 baseline for Research Paper 1 (RP1). 
 
@@ -68,3 +70,8 @@ python -m venv venv
 pip install -r requirements.txt
 streamlit run app.py
 ```
+
+---
+
+## 📜 License
+This project is licensed under the [MIT License](https://opensource.org/licenses/MIT) - see the [LICENSE](LICENSE) file for details. This means you are free to use, modify, and distribute the code, provided you give appropriate credit to the original author.
