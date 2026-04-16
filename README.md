@@ -1,4 +1,4 @@
-# 🫁 DenseNet-121 Pneumonia Detection (RP1 Baseline)
+# 🫁 VGG-19 Pneumonia Detection (RP1 Baseline)
 
 [![Streamlit App](https://static.streamlit.io/badges/streamlit_badge_black_white.svg)](http://localhost:8501)
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
@@ -6,11 +6,11 @@
 [![CUDA 12.8](https://img.shields.io/badge/CUDA-12.8-76B900.svg?style=flat&logo=NVIDIA&logoColor=white)](https://developer.nvidia.com/cuda-toolkit)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-This branch (`DenseNet121-30epochs-patience-RP1`) forms the official DenseNet-121 baseline for Research Paper 1 (RP1). 
+This branch (`VGG19-30epochs-patience-RP1`) forms the official VGG-19 baseline for Research Paper 1 (RP1). 
 
 ## 🎯 Architecture Configuration
-- **Model**: DenseNet-121 (ImageNet fine-tuned)
-- **Classifier Head**: Replaced standard classifier with `nn.Sequential(nn.Dropout(0.3), nn.Linear(1024, 2))`
+- **Model**: VGG-19 (ImageNet fine-tuned)
+- **Classifier Head**: Replaced standard classifier with `nn.Sequential(nn.Dropout(0.3), nn.Linear(4096, 2))`
 - **Dataset**: Original Kaggle dataset (5,856 images). **No offline augmentation was applied** to preserve a clean baseline for direct architectural comparison.
 - **Transforms**: Resize, CenterCrop, RandomHorizontalFlip(p=0.5), RandomRotation(15), ColorJitter, Normalization.
 
@@ -28,17 +28,17 @@ Training actively prevented overfitting via Early Stopping and Dropout.
 
 **Training Status:**
 - Expected Epochs: 30
-- **Actual Epochs Run**: 10 (Early stopping triggered automatically)
-- **Best Performing Epoch**: **Epoch 5**
+- **Actual Epochs Run**: 11 (Early stopping triggered automatically)
+- **Best Performing Epoch**: **Epoch 6**
 
-### Best Epoch Metrics (Epoch 5)
+### Best Epoch Metrics (Epoch 6)
 | Metric                  | Score     |
 |--------------------------|-----------|
-| **Validation Accuracy** | 95.22%    |
-| **Validation Loss**     | 0.1177    |
-| **F1 Score**            | 96.76%    |
+| **Validation Accuracy** | 90.87%    |
+| **Validation Loss**     | 0.2112    |
+| **F1 Score**            | 93.93%    |
 
-> ✨ All 9 performance tracking graphs generated during this run are saved in the `graphs/` folder, and the final 95.22% accuracy model weights are stored in `pneumonia_densenet121.pt`.
+> ✨ All 9 performance tracking graphs generated during this run are saved in the `graphs/` folder, and the final 90.87% accuracy model weights are stored in `pneumonia_vgg19.pt`.
 
 ---
 
