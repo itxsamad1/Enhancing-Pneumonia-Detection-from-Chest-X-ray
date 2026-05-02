@@ -66,15 +66,17 @@ DATASET_DIR        = BASE_DIR / "dataset"
 RESULTS_FILE       = BASE_DIR / "kfold_results.json"
 
 N_FOLDS            = 5
-MAX_EPOCHS_PER_FOLD = 30
-PATIENCE           = 5
+MAX_EPOCHS_PER_FOLD = 50
+PATIENCE           = 8
 BATCH_SIZE         = 64
 LEARNING_RATE      = 0.001
 WEIGHT_DECAY       = 1e-4
 DROPOUT_RATE       = 0.3
 GRADIENT_CLIP      = 1.0
-NUM_WORKERS        = 4
-PIN_MEMORY         = True
+# NOTE: num_workers > 0 causes Windows multiprocessing crash when DataLoaders
+# are recreated between folds. GPU is the bottleneck anyway, not data loading.
+NUM_WORKERS        = 0
+PIN_MEMORY         = False  # no benefit with num_workers=0
 RANDOM_STATE       = 42
 
 torch.backends.cudnn.benchmark = True
@@ -315,10 +317,9 @@ def run_kfold(model_key: str, dataset: ChestXrayDataset,
 
         train_loader = DataLoader(train_sub, batch_size=BATCH_SIZE, shuffle=True,
                                   num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY,
-                                  persistent_workers=True, drop_last=True)
+                                  drop_last=True)
         val_loader   = DataLoader(val_sub,   batch_size=BATCH_SIZE, shuffle=False,
-                                  num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY,
-                                  persistent_workers=True)
+                                  num_workers=NUM_WORKERS, pin_memory=PIN_MEMORY)
 
         model     = build_model(model_key).to(device)
         criterion = nn.CrossEntropyLoss()
