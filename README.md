@@ -41,36 +41,31 @@ Pneumonia is a serious lung infection that must be diagnosed early for effective
 
 ---
 
-## 📂 Dataset Overview
+## 📂 Dataset Overview (Updated Phase 2)
 
-We utilized three comprehensive datasets to ensure robust model training and validation:
+Originally (Phase 1, 11 months ago), this project utilized a small baseline of Kaggle pediatric chest X-rays (~5,856 images). 
 
-### 1. Chest X-Ray Images (Pneumonia) – Kaggle
-- 📁 Training Set:
-  - Normal: 1,341 images
-  - Pneumonia: 3,875 images
-- 📁 Validation & Test Sets:
-  - Proportionally split
+**As of the current Phase 2 multi-architecture study, the dataset has been massively expanded** by merging the original Kaggle dataset with the expert-annotated **RSNA Pneumonia Detection Challenge** dataset. 
 
-### 2. NIH ChestX-ray14
-- 📁 Total: 112,000+ images
-- 14 disease classes
-- Used: Pneumonia cases
+The new combined dataset contains **31,540 high-quality chest X-ray images**:
 
-### 3. ChestXpert-v1.0-small
-- 📁 Filtered subset
-- Normal & Pneumonia cases
-- High-quality scans
+### 1. Training Set (26,526 images)
+- 📁 **Normal:** 18,300 images (Kaggle: 1,266 | RSNA: 17,034)
+- 📁 **Pneumonia:** 8,226 images (Kaggle: 3,418 | RSNA: 4,808)
+
+### 2. Validation Set (5,014 images)
+- 📁 **Normal:** 3,308 images (Kaggle: 317 | RSNA: 2,991)
+- 📁 **Pneumonia:** 1,706 images (Kaggle: 855 | RSNA: 851)
 
 📦 **Dataset Organization**:
 ```
 /dataset/
-├── chest_xray/
-│   ├── train/
-│   ├── test/
-│   └── val/
-├── chestxray14/
-└── chestxpert-v1.0-small/
+├── train/
+│   ├── NORMAL/
+│   └── PNEUMONIA/
+└── val/
+    ├── NORMAL/
+    └── PNEUMONIA/
 ```
 
 > 📝 Note: Due to size constraints, datasets are not included in the repository. Please download and place them in a `/dataset/` folder.
