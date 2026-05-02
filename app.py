@@ -1,617 +1,448 @@
+"""
+Pneumonia Detection — Streamlit Web Application (Phase 2 RP2)
+==============================================================
+Self-contained multi-architecture inference app with Grad-CAM++ support.
+Supports: ResNet-18/50, DenseNet-121, VGG-19, EfficientNet-B0,
+          MobileNetV3, ConvNeXt-Tiny, DeiT-Tiny, Swin-Tiny, ViT-B/16.
+"""
+
 import os
 import sys
-import logging
-import time
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+
 import io
+import logging
 import shutil
-import random
 from pathlib import Path
-import glob
 
-# Configure minimal settings to reduce errors
-os.environ["STREAMLIT_LOGGER_LEVEL"] = "error"
-
-# Import core libraries
 import streamlit as st
 import numpy as np
 import cv2
-import matplotlib.pyplot as plt
 from PIL import Image
 import torch
-
-# Add the current directory to sys.path to resolve module imports
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), "pneumonia_detection_app"))
-
-# Import custom modules - wrap in try/except for demo mode
-try:
-    from pneumonia_detection_app.preprocessing.utils import preprocess_image, cv2_to_pil
-    from pneumonia_detection_app.model.load_model import load_model
-    from pneumonia_detection_app.inference import predict_image, generate_gradcam, overlay_gradcam
-    DEMO_MODE = False
-except Exception as e:
-    DEMO_MODE = True
-    print(f"Error importing modules: {e}. Running in demo mode.")
-
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+import torch.nn as nn
+import torchvision.transforms as transforms
+from torchvision.models import (
+    resnet18, ResNet18_Weights,
+    resnet50, ResNet50_Weights,
+    densenet121, DenseNet121_Weights,
+    vgg19, VGG19_Weights,
+    mobilenet_v3_small, MobileNet_V3_Small_Weights,
+    efficientnet_b0, EfficientNet_B0_Weights,
+    convnext_tiny, ConvNeXt_Tiny_Weights,
 )
+
+try:
+    import timm
+    TIMM_AVAILABLE = True
+except ImportError:
+    TIMM_AVAILABLE = False
+
+from gradcam import run_gradcam_pp
+
+# ─── Logging ─────────────────────────────────────────────────────────────────
+logging.basicConfig(level=logging.ERROR)
 logger = logging.getLogger(__name__)
 
-# Path constants
-MODEL_PATH = "pneumonia_resnet18.pt"  # Use the 100% accurate model
-SAMPLE_DIR = os.path.join(os.path.dirname(__file__), "assets", "sample_images")
-DATASET_DIR = os.path.join(os.path.dirname(__file__), "Chest X-Ray Images(Pneumonia)", "chest_xray")
+# ─── Constants ───────────────────────────────────────────────────────────────
+BASE_DIR    = Path(__file__).parent
+SAMPLE_DIR  = BASE_DIR / "assets" / "sample_images"
+DATASET_DIR = BASE_DIR / "dataset"
+DROPOUT     = 0.3
 
-# Ensure the sample directory exists
-os.makedirs(SAMPLE_DIR, exist_ok=True)
+MODEL_REGISTRY = {
+    "ResNet-18"       : ("pneumonia_resnet18.pt",        "resnet18"),
+    "ResNet-50"       : ("pneumonia_resnet50.pt",        "resnet50"),
+    "DenseNet-121"    : ("pneumonia_densenet121.pt",     "densenet121"),
+    "VGG-19"          : ("pneumonia_vgg19.pt",           "vgg19"),
+    "EfficientNet-B0" : ("pneumonia_efficientnet_b0.pt", "efficientnetb0"),
+    "MobileNetV3"     : ("pneumonia_mobilenetv3.pt",     "mobilenetv3"),
+    "ConvNeXt-Tiny"   : ("pneumonia_convnext_tiny.pt",   "convnext_tiny"),
+    "DeiT-Tiny"       : ("pneumonia_deit_tiny.pt",       "deit_tiny"),
+    "Swin-Tiny"       : ("pneumonia_swin_tiny.pt",       "swin_tiny"),
+    "ViT-B/16"        : ("pneumonia_vit_b_16.pt",        "vit_b_16"),
+}
 
-def setup_sample_images(force_refresh=False):
-    """Setup sample images from the dataset or provided files.
-    Uses specific high-quality images rather than random selection."""
-    normal_path = os.path.join(SAMPLE_DIR, "normal.jpg")
-    pneumonia_path = os.path.join(SAMPLE_DIR, "pneumonia.jpg")
-    
-    # If files already exist and are valid and no refresh is requested, keep them
-    if not force_refresh:
-        try:
-            if os.path.exists(normal_path) and os.path.exists(pneumonia_path):
-                # Test if these images can be opened
-                Image.open(normal_path).convert("RGB")
-                Image.open(pneumonia_path).convert("RGB")
-                return True
-        except Exception as e:
-            print(f"Existing sample images are not valid: {e}, will replace them")
-    
-    # First check for pasted images in the root directory
-    root_normal = os.path.join(os.path.dirname(__file__), "normal.jpeg")
-    root_pneumonia = os.path.join(os.path.dirname(__file__), "pneumonia.jpg")
-    
-    success = False
-    
-    # Try to use the pasted images first
-    if os.path.exists(root_normal) and os.path.exists(root_pneumonia):
-        try:
-            # Copy to sample directory
-            shutil.copy(root_normal, normal_path)
-            shutil.copy(root_pneumonia, pneumonia_path)
-            
-            # Verify the images
-            Image.open(normal_path).convert("RGB")
-            Image.open(pneumonia_path).convert("RGB")
-            print("Using user-provided images for samples")
-            success = True
-        except Exception as e:
-            print(f"Error using user-provided images: {e}")
-            # Will try the dataset next
-    
-    # If user images couldn't be used, try the dataset with specific files
-    if not success and os.path.exists(DATASET_DIR):
-        try:
-            # Use specific high-quality images from dataset
-            normal_dataset_dir = os.path.join(DATASET_DIR, "train", "NORMAL")
-            pneumonia_dataset_dir = os.path.join(DATASET_DIR, "train", "PNEUMONIA")
-            
-            # Specific high-quality normal image
-            normal_file = "NORMAL2-IM-1427-0001.jpeg"  # A clear, high-quality normal image
-            if not os.path.exists(os.path.join(normal_dataset_dir, normal_file)):
-                # Fallback if the specific file doesn't exist
-                normal_files = os.listdir(normal_dataset_dir)
-                if normal_files:
-                    normal_file = normal_files[0]
-            
-            normal_image_path = os.path.join(normal_dataset_dir, normal_file)
-            if os.path.exists(normal_image_path):
-                shutil.copy(normal_image_path, normal_path)
-                print(f"Using specific normal image: {normal_file}")
-            
-            # Specific high-quality pneumonia image
-            pneumonia_file = "person1_bacteria_1.jpeg"  # A clear case of pneumonia
-            if not os.path.exists(os.path.join(pneumonia_dataset_dir, pneumonia_file)):
-                # Fallback if the specific file doesn't exist
-                pneumonia_files = os.listdir(pneumonia_dataset_dir)
-                if pneumonia_files:
-                    pneumonia_file = pneumonia_files[0]
-            
-            pneumonia_image_path = os.path.join(pneumonia_dataset_dir, pneumonia_file)
-            if os.path.exists(pneumonia_image_path):
-                shutil.copy(pneumonia_image_path, pneumonia_path)
-                print(f"Using specific pneumonia image: {pneumonia_file}")
-            
-            # Verify the images
-            Image.open(normal_path).convert("RGB")
-            Image.open(pneumonia_path).convert("RGB")
-            print("Using dataset images for samples")
-            success = True
-        except Exception as e:
-            print(f"Error using dataset images: {e}")
-            # Will try the fallback next
-    
-    # If still unsuccessful, use text-based fallback images
-    if not success:
-        try:
-            # Create simple text-based images
-            normal_img = Image.new('RGB', (224, 224), color='white')
-            pneumonia_img = Image.new('RGB', (224, 224), color=(245, 230, 230))
-            
-            # Add text
-            import PIL.ImageDraw as ImageDraw
-            import PIL.ImageFont as ImageFont
-            
-            try:
-                # Try to get a font
-                font = ImageFont.truetype("arial.ttf", 20)
-            except:
-                font = ImageFont.load_default()
-                
-            draw_normal = ImageDraw.Draw(normal_img)
-            draw_normal.text((10, 100), "Normal Chest X-Ray Sample", fill=(0, 0, 0), font=font)
-            
-            draw_pneumonia = ImageDraw.Draw(pneumonia_img)
-            draw_pneumonia.text((10, 100), "Pneumonia Chest X-Ray Sample", fill=(0, 0, 0), font=font)
-            
-            normal_img.save(normal_path)
-            pneumonia_img.save(pneumonia_path)
-            print("Created emergency backup sample images")
-            success = True
-        except Exception as e:
-            print(f"Failed to create emergency backup sample images: {e}")
-    
-    return success
+# Available (weight file exists locally)
+AVAILABLE_MODELS = {
+    name: cfg for name, cfg in MODEL_REGISTRY.items()
+    if (BASE_DIR / cfg[0]).exists()
+}
 
-def main():
-    # Set page configuration
-    st.set_page_config(
-        page_title="Pneumonia Detection App",
-        page_icon="🫁",
-        layout="wide",
-        initial_sidebar_state="expanded"
-    )
+# ─── Image Transform (same as training) ──────────────────────────────────────
+val_transform = transforms.Compose([
+    transforms.Resize(256),
+    transforms.CenterCrop(224),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.485, 0.456, 0.406],
+                         std=[0.229, 0.224, 0.225]),
+])
 
-    # Apply custom CSS for better UI
+# ─── Model Factory (mirrors train_model.py exactly) ──────────────────────────
+def _build_model(model_key: str) -> nn.Module:
+    key = model_key.lower()
+    if key == "resnet18":
+        m = resnet18(weights=None)
+        m.fc = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.fc.in_features, 2))
+    elif key == "resnet50":
+        m = resnet50(weights=None)
+        m.fc = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.fc.in_features, 2))
+    elif key == "densenet121":
+        m = densenet121(weights=None)
+        m.classifier = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.classifier.in_features, 2))
+    elif key == "vgg19":
+        m = vgg19(weights=None)
+        m.classifier[6] = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.classifier[6].in_features, 2))
+    elif key == "efficientnetb0":
+        m = efficientnet_b0(weights=None)
+        m.classifier[1] = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.classifier[1].in_features, 2))
+    elif key == "mobilenetv3":
+        m = mobilenet_v3_small(weights=None)
+        m.classifier[3] = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.classifier[3].in_features, 2))
+    elif key == "convnext_tiny":
+        m = convnext_tiny(weights=None)
+        m.classifier[2] = nn.Sequential(nn.Dropout(DROPOUT), nn.Linear(m.classifier[2].in_features, 2))
+    elif key in ("deit_tiny", "swin_tiny", "vit_b_16"):
+        if not TIMM_AVAILABLE:
+            raise RuntimeError("timm not installed. Run: pip install timm")
+        timm_name = {
+            "deit_tiny": "deit_tiny_patch16_224",
+            "swin_tiny": "swin_tiny_patch4_window7_224",
+            "vit_b_16" : "vit_base_patch16_224",
+        }[key]
+        m = timm.create_model(timm_name, pretrained=False, num_classes=2)
+    else:
+        raise ValueError(f"Unknown model key: {model_key}")
+    return m
+
+
+@st.cache_resource(show_spinner=False)
+def load_model_cached(display_name: str):
+    weight_file, model_key = MODEL_REGISTRY[display_name]
+    weight_path = BASE_DIR / weight_file
+
+    if not weight_path.exists():
+        return None, None
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    model = _build_model(model_key)
+    state = torch.load(str(weight_path), map_location=device)
+    model.load_state_dict(state)
+    model.to(device)
+    model.eval()
+    return model, device
+
+
+# ─── Preprocessing helpers ───────────────────────────────────────────────────
+def apply_clahe(img_rgb: np.ndarray) -> np.ndarray:
+    lab = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2LAB)
+    l, a, b = cv2.split(lab)
+    clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+    l = clahe.apply(l)
+    return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2RGB)
+
+def apply_histeq(img_rgb: np.ndarray) -> np.ndarray:
+    yuv = cv2.cvtColor(img_rgb, cv2.COLOR_RGB2YUV)
+    yuv[:, :, 0] = cv2.equalizeHist(yuv[:, :, 0])
+    return cv2.cvtColor(yuv, cv2.COLOR_YUV2RGB)
+
+def apply_denoise(img_rgb: np.ndarray) -> np.ndarray:
+    return cv2.fastNlMeansDenoisingColored(img_rgb, None, 10, 10, 7, 21)
+
+def preprocess_image(pil_img: Image.Image, options: dict):
+    img = np.array(pil_img.convert("RGB"))
+    applied = []
+    if options.get("clahe"):
+        img = apply_clahe(img); applied.append("CLAHE")
+    if options.get("histeq"):
+        img = apply_histeq(img); applied.append("Histogram Equalization")
+    if options.get("denoise"):
+        img = apply_denoise(img); applied.append("Denoising")
+    return Image.fromarray(img), applied
+
+
+# ─── CSS ─────────────────────────────────────────────────────────────────────
+def inject_css():
     st.markdown("""
     <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+    html, body, [class*="css"] { font-family: 'Inter', sans-serif; }
+
     .main-header {
-        font-size: 2.5rem;
-        color: #0077B6;
-        text-align: center;
-        margin-bottom: 1rem;
+        font-size: 2.4rem; font-weight: 700;
+        background: linear-gradient(135deg, #0077B6, #00B4D8);
+        -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        text-align: center; padding: 1rem 0 0.25rem;
     }
-    .sub-header {
-        font-size: 1.5rem;
-        color: #444;
-        margin-top: 0;
+    .sub-title {
+        text-align: center; color: #555; font-size: 1rem;
+        margin-bottom: 1.5rem;
     }
-    .info-box {
-        background-color: #f8f9fa;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 0.5rem solid #0077B6;
-        margin: 1rem 0;
+    .metric-card {
+        background: linear-gradient(135deg, #f0f8ff, #e8f4fc);
+        border-radius: 12px; padding: 1.2rem;
+        border-left: 4px solid #0077B6;
+        margin: 0.4rem 0;
     }
-    .prediction-box-normal {
-        background-color: #d1e7dd;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 0.5rem solid #198754;
-        margin: 1rem 0;
+    .result-normal {
+        background: linear-gradient(135deg, #d4edda, #c3e6cb);
+        border-radius: 12px; padding: 1.2rem;
+        border-left: 4px solid #28a745; margin: 0.8rem 0;
     }
-    .prediction-box-pneumonia {
-        background-color: #f8d7da;
-        padding: 1rem;
-        border-radius: 0.5rem;
-        border-left: 0.5rem solid #dc3545;
-        margin: 1rem 0;
+    .result-pneumonia {
+        background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+        border-radius: 12px; padding: 1.2rem;
+        border-left: 4px solid #dc3545; margin: 0.8rem 0;
     }
-    .stProgress .st-bo {
-        background-color: #0077B6;
+    .gradcam-badge {
+        display: inline-block;
+        background: linear-gradient(90deg, #7F00FF, #E100FF);
+        color: white; padding: 3px 12px; border-radius: 20px;
+        font-size: 0.8rem; font-weight: 600; margin-bottom: 0.5rem;
     }
+    .stButton > button {
+        background: linear-gradient(135deg, #0077B6, #00B4D8);
+        color: white; border: none; border-radius: 8px;
+        font-weight: 600; transition: all 0.2s;
+    }
+    .stButton > button:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(0,119,182,0.4); }
     </style>
     """, unsafe_allow_html=True)
 
-    # Header
-    st.markdown('<h1 class="main-header">Pneumonia Detection from Chest X-rays</h1>', unsafe_allow_html=True)
-    st.markdown(
-        '<p style="text-align: center">Enhancing Pneumonia Detection from Chest X-ray Images using Image Preprocessing and Deep Learning</p>', 
-        unsafe_allow_html=True
-    )
-    
-    if DEMO_MODE:
-        st.warning("⚠️ Running in DEMO MODE. This is a demonstration with simulated predictions.")
-    
-    # Load model (real or demo)
-    with st.spinner("Loading model... Please wait..."):
-        model_load_result = get_model()
-        if model_load_result is None or model_load_result[0] is None:
-            st.error("⚠️ Error: Failed to load the model. Please check if the model file exists and is valid.")
-            st.stop()
-        else:
-            model, metadata = model_load_result
 
-    # Layout: sidebar and main content
+# ─── App ─────────────────────────────────────────────────────────────────────
+def main():
+    st.set_page_config(
+        page_title="Pneumonia Detection — RP2",
+        page_icon="🫁",
+        layout="wide",
+        initial_sidebar_state="expanded",
+    )
+    inject_css()
+
+    st.markdown('<h1 class="main-header">🫁 Pneumonia Detection — Phase 2</h1>', unsafe_allow_html=True)
+    st.markdown('<p class="sub-title">Multi-Architecture Deep Learning with Grad-CAM++ Explainability · RSNA + Kaggle Dataset · 10 Architectures</p>', unsafe_allow_html=True)
+
+    # ── Sidebar ────────────────────────────────────────────────────────────────
     with st.sidebar:
-        st.markdown('<h2 class="sub-header">Preprocessing Options</h2>', unsafe_allow_html=True)
-        
-        # Preprocessing options
-        if 'clahe' not in st.session_state:
-            st.session_state.clahe = False
-        if 'histogram_eq' not in st.session_state:
-            st.session_state.histogram_eq = False
-        if 'denoising' not in st.session_state:
-            st.session_state.denoising = False
-        
-        clahe = st.checkbox("Apply CLAHE (Contrast Limited Adaptive Histogram Equalization)", 
-                           value=st.session_state.clahe, key="clahe_checkbox")
-        histogram_eq = st.checkbox("Apply Histogram Equalization", 
-                                  value=st.session_state.histogram_eq, key="histogram_checkbox")
-        denoising = st.checkbox("Apply Denoising", 
-                               value=st.session_state.denoising, key="denoising_checkbox")
-        
-        # Update session state based on checkboxes
-        st.session_state.clahe = clahe
-        st.session_state.histogram_eq = histogram_eq
-        st.session_state.denoising = denoising
-        
-        # Preprocessing buttons
-        col1, col2 = st.columns(2)
-        
-        # Use unique keys for buttons
-        with col1:
-            if st.button("Apply All", key="apply_all_btn"):
-                st.session_state.clahe = True
-                st.session_state.histogram_eq = True
-                st.session_state.denoising = True
-                st.rerun()
-                
-        with col2:
-            if st.button("Apply None", key="apply_none_btn"):
-                st.session_state.clahe = False
-                st.session_state.histogram_eq = False
-                st.session_state.denoising = False
-                st.rerun()
-        
-        # Store preprocessing options in session state
-        preprocessing_options = {
-            "clahe": st.session_state.clahe,
-            "histogram_eq": st.session_state.histogram_eq,
-            "denoising": st.session_state.denoising
-        }
-        
-        st.session_state.preprocessing_options = preprocessing_options
-        
-        # Preprocessing info
-        with st.expander("About Preprocessing Techniques"):
-            st.markdown("""
-            ### CLAHE
-            Contrast Limited Adaptive Histogram Equalization enhances local contrast while limiting noise amplification.
-            
-            ### Histogram Equalization
-            Improves global contrast by effectively spreading out the most frequent intensity values.
-            
-            ### Denoising
-            Reduces noise in the image while preserving important features and details.
-            """)
-            
-        # Sample images section
-        st.markdown("---")
-        st.markdown("### Don't have an image to test?")
-        sample_col1, sample_col2 = st.columns(2)
-        
-        # Check if sample images exist
-        normal_path = os.path.join(SAMPLE_DIR, "normal.jpg")
-        pneumonia_path = os.path.join(SAMPLE_DIR, "pneumonia.jpg")
-        
-        has_samples = os.path.exists(normal_path) and os.path.exists(pneumonia_path)
-        
-        if has_samples:
-            with sample_col1:
-                if st.button("Load Normal Sample", key="load_normal_btn"):
-                    try:
-                        img = Image.open(normal_path).convert("RGB")
-                        st.session_state.uploaded_image = img
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error loading sample: {str(e)}")
-            
-            with sample_col2:
-                if st.button("Load Pneumonia Sample", key="load_pneumonia_btn"):
-                    try:
-                        img = Image.open(pneumonia_path).convert("RGB")
-                        st.session_state.uploaded_image = img
-                        st.rerun()
-                    except Exception as e:
-                        st.error(f"Error loading sample: {str(e)}")
-                        
-            # Add a button to refresh sample images if desired
-            if st.button("Refresh Sample Images", key="refresh_samples_btn"):
-                with st.spinner("Refreshing sample images..."):
-                    setup_sample_images(force_refresh=True)
-                st.success("Sample images refreshed!")
-                st.rerun()
-        else:
-            st.info("Sample images not found. Please add sample images to the assets/sample_images directory.")
+        st.markdown("## 🧠 Model Selection")
 
-    # Main content area - using two columns layout
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        st.markdown('<h2 class="sub-header">Upload Chest X-ray Image</h2>', unsafe_allow_html=True)
-        
-        # File uploader
-        uploaded_file = st.file_uploader(
-            "Choose a chest X-ray image (JPG/PNG)", 
-            type=["jpg", "jpeg", "png"]
-        )
-        
-        # Handle uploaded file
-        if uploaded_file is not None:
-            try:
-                # Open image and store in session state
-                st.session_state.uploaded_image = Image.open(uploaded_file).convert("RGB")
-                st.image(
-                    st.session_state.uploaded_image, 
-                    caption="Uploaded Chest X-ray", 
-                    use_container_width=True
-                )
-            except Exception as e:
-                st.error(f"Error opening the image: {str(e)}")
-                st.session_state.pop('uploaded_image', None)
-        
-        # Show the uploaded image from session state if available
-        elif 'uploaded_image' in st.session_state:
-            st.image(
-                st.session_state.uploaded_image, 
-                caption="Uploaded Chest X-ray", 
-                use_container_width=True
+        if not AVAILABLE_MODELS:
+            st.warning("No trained models found! Train a model first using `train_model.py`.")
+            selected_model = None
+        else:
+            selected_model = st.selectbox(
+                "Choose architecture",
+                list(AVAILABLE_MODELS.keys()),
+                help="Only models with trained weights (.pt files) appear here."
             )
-        else:
-            # Show placeholder if no image is uploaded
-            st.info("Please upload a chest X-ray image or select a sample image.")
-    
-    # Process image button
-    process_button = st.button(
-        "Detect Pneumonia",
-        type="primary",
-        disabled=not ('uploaded_image' in st.session_state)
-    )
-    
-    # When process button is clicked and image is available
-    if process_button and 'uploaded_image' in st.session_state:
-        # Get preprocessing options from session state
-        preprocessing_options = st.session_state.get(
-            'preprocessing_options', 
-            {"clahe": False, "histogram_eq": False, "denoising": False}
-        )
-        
-        with st.spinner("Processing image..."):
-            try:
-                # Create a copy of the image for preprocessing
-                original_image = st.session_state.uploaded_image.copy()
-                
-                # Preprocess the image - real or demo
-                if DEMO_MODE:
-                    processed_image_array, applied_techniques = demo_preprocess_image(
-                        original_image,
-                        preprocessing_options
-                    )
-                    processed_image = Image.fromarray(processed_image_array)
-                else:
-                    processed_image_array, applied_techniques = preprocess_image(
-                        original_image, 
-                        preprocessing_options
-                    )
-                    processed_image = cv2_to_pil(processed_image_array)
-                
-                # Run inference - real or demo
-                if DEMO_MODE:
-                    prediction_results = demo_predict(processed_image)
-                else:
-                    prediction_results = predict_image(
-                        model,
-                        processed_image,
-                        metadata["device"]
-                    )
-                
-                # Generate Grad-CAM visualization - real or demo
-                with st.spinner("Generating visualization..."):
-                    if DEMO_MODE:
-                        original_np, heatmap = demo_gradcam(processed_image)
-                        heatmap_overlay = demo_overlay_gradcam(original_np, heatmap)
-                    else:
-                        original_np, heatmap = generate_gradcam(
-                            model,
-                            processed_image,
-                            metadata["device"]
-                        )
-                        heatmap_overlay = overlay_gradcam(original_np, heatmap)
-                
-                # Store results in session state
-                st.session_state.processed_image = processed_image
-                st.session_state.prediction_results = prediction_results
-                st.session_state.applied_techniques = applied_techniques
-                st.session_state.heatmap_overlay = heatmap_overlay
-                
-                # Jump to visualization section
-                st.rerun()
-                
-            except Exception as e:
-                st.error(f"Error processing image: {str(e)}")
-                logger.exception("Error in processing pipeline")
-    
-    # Show results if available in session state
-    if ('processed_image' in st.session_state and 
-        'prediction_results' in st.session_state and 
-        'applied_techniques' in st.session_state):
-        
-        col1, col2 = st.columns(2)
-        
-        # Original vs processed image
-        col1.markdown('<h3 class="sub-header">Original Image</h3>', unsafe_allow_html=True)
-        col1.image(
-            st.session_state.uploaded_image, 
-            caption="Original Chest X-ray", 
-            use_container_width=True
-        )
-        
-        col2.markdown('<h3 class="sub-header">Processed Image</h3>', unsafe_allow_html=True)
-        col2.image(
-            st.session_state.processed_image, 
-            caption=f"Processed X-ray", 
-            use_container_width=True
-        )
-        
-        # Applied techniques
-        if st.session_state.applied_techniques:
-            st.markdown("**Preprocessing Applied:**")
-            st.markdown(", ".join(st.session_state.applied_techniques))
-        else:
-            st.markdown("**No preprocessing applied**")
-        
+
         st.markdown("---")
-        
-        # Prediction results
-        prediction = st.session_state.prediction_results["prediction"]
-        probability = st.session_state.prediction_results["probability"]
-        
-        # Different styling based on prediction
-        if prediction == "Normal":
-            st.markdown(f'<div class="prediction-box-normal">', unsafe_allow_html=True)
-            st.markdown(f"### Prediction: NORMAL", unsafe_allow_html=True)
-            st.markdown('<p style="font-size: 18px; color: #198754; font-weight: bold;">No pneumonia detected</p>', unsafe_allow_html=True)
-            st.progress(probability / 100)
-            st.markdown(f"**Confidence: {probability:.2f}%**")
-            st.markdown('</div>', unsafe_allow_html=True)
-        else:  # Pneumonia
-            st.markdown(f'<div class="prediction-box-pneumonia">', unsafe_allow_html=True)
-            st.markdown(f"### Prediction: PNEUMONIA DETECTED", unsafe_allow_html=True)
-            st.markdown('<p style="font-size: 18px; color: #dc3545; font-weight: bold;">Pneumonia detected in the X-ray image</p>', unsafe_allow_html=True)
-            st.progress(probability / 100)
-            st.markdown(f"**Confidence: {probability:.2f}%**")
-            st.markdown('</div>', unsafe_allow_html=True)
-        
-        # Grad-CAM visualization
-        if 'heatmap_overlay' in st.session_state:
-            st.markdown('<h3 class="sub-header">Model Attention Map (Grad-CAM)</h3>', unsafe_allow_html=True)
-            st.image(
-                st.session_state.heatmap_overlay,
-                caption="Areas the model focused on for making the prediction",
-                use_container_width=True
-            )
-            
-            with st.expander("About Grad-CAM"):
-                st.markdown("""
-                **Gradient-weighted Class Activation Mapping (Grad-CAM)** visualizes which parts of the image 
-                the model is focusing on to make its prediction. Warmer colors (red/yellow) indicate areas 
-                that strongly influenced the model's decision.
-                
-                This helps in interpreting the model's decision and ensuring it's focusing on clinically 
-                relevant features rather than artifacts or irrelevant areas of the X-ray.
-                """)
-    
-    # Add footer with research paper citation
+        st.markdown("## 🔬 Grad-CAM++ Settings")
+        gradcam_enabled = st.toggle("Enable Grad-CAM++ Heatmap", value=True)
+        explain_class = st.radio(
+            "Explain prediction for",
+            ["Predicted class", "Pneumonia (class 1)", "Normal (class 0)"],
+            help="Which class to generate the heatmap for."
+        )
+        target_class_map = {
+            "Predicted class": None, "Pneumonia (class 1)": 1, "Normal (class 0)": 0
+        }
+        target_class = target_class_map[explain_class]
+
+        st.markdown("---")
+        st.markdown("## 🖼️ Preprocessing")
+        clahe   = st.checkbox("CLAHE (Contrast Enhancement)", value=False)
+        histeq  = st.checkbox("Histogram Equalization",       value=False)
+        denoise = st.checkbox("Denoising",                    value=False)
+        prep_opts = {"clahe": clahe, "histeq": histeq, "denoise": denoise}
+
+        st.markdown("---")
+        st.markdown("## 🔬 Sample Images")
+        normal_sample    = DATASET_DIR / "val" / "NORMAL"
+        pneumonia_sample = DATASET_DIR / "val" / "PNEUMONIA"
+
+        c1, c2 = st.columns(2)
+        with c1:
+            if st.button("Load Normal", use_container_width=True):
+                if normal_sample.exists():
+                    f = sorted(normal_sample.iterdir())[0]
+                    st.session_state.sample_image = Image.open(f).convert("RGB")
+                    st.session_state.pop("results", None)
+                    st.rerun()
+        with c2:
+            if st.button("Load Pneumonia", use_container_width=True):
+                if pneumonia_sample.exists():
+                    f = sorted(pneumonia_sample.iterdir())[0]
+                    st.session_state.sample_image = Image.open(f).convert("RGB")
+                    st.session_state.pop("results", None)
+                    st.rerun()
+
+        st.markdown("---")
+        st.caption("**Dataset**: Kaggle Chest X-Ray + RSNA Challenge\n\n**31,540 images** total")
+
+    # ── Main Content ───────────────────────────────────────────────────────────
+    col_upload, col_result = st.columns([1, 1], gap="large")
+
+    with col_upload:
+        st.markdown("### 📤 Upload Chest X-Ray")
+        uploaded_file = st.file_uploader(
+            "Drag and drop a JPG / PNG X-ray", type=["jpg", "jpeg", "png"],
+            label_visibility="collapsed"
+        )
+        if uploaded_file:
+            st.session_state.sample_image = Image.open(uploaded_file).convert("RGB")
+            st.session_state.pop("results", None)
+
+        if "sample_image" in st.session_state:
+            pil_img = st.session_state.sample_image
+            st.image(pil_img, caption="Input X-Ray", use_container_width=True)
+
+            # Show preprocessing preview if any option is ticked
+            if any(prep_opts.values()):
+                processed_pil, applied = preprocess_image(pil_img, prep_opts)
+                st.caption(f"Preprocessing applied: {', '.join(applied)}")
+            else:
+                processed_pil, applied = pil_img, []
+
+            # Detect button
+            if selected_model:
+                detect_btn = st.button("🔍 Detect Pneumonia", type="primary", use_container_width=True)
+            else:
+                st.info("Train a model first, then its `.pt` file will appear in the sidebar.")
+                detect_btn = False
+        else:
+            st.info("Upload an X-ray image or load a sample from the sidebar.")
+            detect_btn = False
+
+    # ── Inference ─────────────────────────────────────────────────────────────
+    if detect_btn and "sample_image" in st.session_state and selected_model:
+        with st.spinner(f"Running inference with {selected_model}..."):
+            device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+            model, device = load_model_cached(selected_model)
+
+            if model is None:
+                st.error(f"Could not load weights for {selected_model}.")
+            else:
+                pil_img_for_inf = processed_pil if any(prep_opts.values()) else st.session_state.sample_image
+                tensor = val_transform(pil_img_for_inf).unsqueeze(0).to(device)
+
+                _, model_key = MODEL_REGISTRY[selected_model]
+
+                if gradcam_enabled:
+                    with st.spinner("Generating Grad-CAM++ heatmap..."):
+                        img_np = np.array(pil_img_for_inf.convert("RGB"))
+                        overlay, cam, pred, probs = run_gradcam_pp(
+                            model, model_key, tensor, img_np, target_class
+                        )
+                else:
+                    with torch.no_grad():
+                        out   = model(tensor)
+                        probs = torch.softmax(out, dim=1)[0].tolist()
+                        pred  = int(torch.argmax(out, dim=1).item())
+                    overlay, cam = None, None
+
+                st.session_state.results = {
+                    "pred": pred, "probs": probs,
+                    "overlay": overlay, "cam": cam,
+                    "applied": applied,
+                    "model_name": selected_model,
+                }
+                st.rerun()
+
+    # ── Results Panel ─────────────────────────────────────────────────────────
+    with col_result:
+        st.markdown("### 📊 Analysis Results")
+
+        if "results" not in st.session_state:
+            st.markdown("""
+            <div style="background:#f8f9fa; border-radius:12px; padding:2rem; text-align:center; color:#888; min-height:200px; display:flex; flex-direction:column; justify-content:center;">
+                <p style="font-size:3rem; margin:0">🫁</p>
+                <p style="margin:0.5rem 0 0">Upload an X-ray and click <strong>Detect</strong></p>
+            </div>
+            """, unsafe_allow_html=True)
+        else:
+            r = st.session_state.results
+            pred  = r["pred"]
+            probs = r["probs"]
+            normal_conf    = probs[0] * 100
+            pneumonia_conf = probs[1] * 100
+
+            # Prediction Card
+            if pred == 0:
+                st.markdown(f"""
+                <div class="result-normal">
+                    <h3 style="margin:0; color:#155724">✅ Normal</h3>
+                    <p style="margin:4px 0 0; color:#155724">No pneumonia detected — Confidence: <strong>{normal_conf:.1f}%</strong></p>
+                </div>
+                """, unsafe_allow_html=True)
+            else:
+                st.markdown(f"""
+                <div class="result-pneumonia">
+                    <h3 style="margin:0; color:#721c24">⚠️ Pneumonia Detected</h3>
+                    <p style="margin:4px 0 0; color:#721c24">Pneumonia indicators found — Confidence: <strong>{pneumonia_conf:.1f}%</strong></p>
+                </div>
+                """, unsafe_allow_html=True)
+
+            # Probability bars
+            st.markdown("**Class Probabilities**")
+            st.markdown(f"Normal ({normal_conf:.1f}%)")
+            st.progress(probs[0])
+            st.markdown(f"Pneumonia ({pneumonia_conf:.1f}%)")
+            st.progress(probs[1])
+
+            # Model badge
+            st.caption(f"Model: **{r['model_name']}** &nbsp;|&nbsp; Preprocessing: {', '.join(r['applied']) if r['applied'] else 'None'}")
+
+            # Grad-CAM++
+            if r.get("overlay") is not None:
+                st.markdown("---")
+                st.markdown('<span class="gradcam-badge">Grad-CAM++</span>', unsafe_allow_html=True)
+                st.markdown("**Model Attention Heatmap**")
+                st.image(r["overlay"], caption="Red/yellow = high attention (areas influencing the prediction)", use_container_width=True)
+
+                with st.expander("📖 What is Grad-CAM++?"):
+                    st.markdown("""
+                    **Grad-CAM++** (Chattopadhyay et al., 2018) is an advanced improvement over Grad-CAM.
+                    It uses *second-order* gradients to compute per-pixel importance weights, giving
+                    **sharper** and **more precise** attention maps compared to standard Grad-CAM.
+
+                    For pneumonia detection, this helps clinicians verify the model is correctly
+                    focusing on **lung regions** (consolidation, opacity) rather than irrelevant
+                    image artifacts like labels or patient positioning.
+
+                    **Colors:**
+                    - 🔴 **Red / Yellow** — High model attention (important for prediction)
+                    - 🔵 **Blue / Green** — Low model attention
+                    """)
+
+    # ── Architecture Info ──────────────────────────────────────────────────────
+    with st.expander("🔬 Architecture Overview — All 10 Models"):
+        arch_data = {
+            "Model":       ["ResNet-18", "ResNet-50", "DenseNet-121", "VGG-19", "EfficientNet-B0",
+                            "MobileNetV3", "ConvNeXt-Tiny", "DeiT-Tiny", "Swin-Tiny", "ViT-B/16"],
+            "Type":        ["CNN", "CNN", "CNN", "CNN", "CNN", "CNN", "Modern CNN",
+                            "Transformer", "Transformer", "Transformer"],
+            "Params (M)":  ["11.7", "25.6", "8.0", "143.7", "5.3",
+                            "2.5", "28.6", "5.7", "28.3", "86.6"],
+            "Status":      ["✅ Trained" if (BASE_DIR / MODEL_REGISTRY[n][0]).exists()
+                           else "🕐 Pending" for n in
+                           ["ResNet-18", "ResNet-50", "DenseNet-121", "VGG-19", "EfficientNet-B0",
+                            "MobileNetV3", "ConvNeXt-Tiny", "DeiT-Tiny", "Swin-Tiny", "ViT-B/16"]],
+        }
+        import pandas as pd
+        st.dataframe(arch_data, use_container_width=True)
+
+    # ── Footer ────────────────────────────────────────────────────────────────
     st.markdown("---")
     st.markdown("""
-    <div style="text-align: center; color: #666; padding: 1.5rem 0;">
-        <p>Part of the research paper:<br/>
-        <strong>"Enhancing Pneumonia Detection from Chest X-ray Images using Image Preprocessing and Deep Learning"</strong></p>
+    <div style="text-align:center; color:#888; padding:1rem 0; font-size:0.85rem;">
+        <strong>Enhancing Pneumonia Detection from Chest X-ray Images</strong> · Phase 2 Multi-Architecture Study<br/>
+        Dataset: Kaggle Chest X-Ray + RSNA Pneumonia Challenge (31,540 images) · PyTorch · Streamlit
     </div>
     """, unsafe_allow_html=True)
 
-@st.cache_resource
-def get_model():
-    """Load model and cache it using Streamlit's cache mechanism"""
-    if DEMO_MODE:
-        return "DEMO_MODEL", {"device": "cpu"}
-    
-    try:
-        return load_model(MODEL_PATH)
-    except FileNotFoundError:
-        # If model file is not found at the specified path, try to find it elsewhere
-        for path in [
-            "./pneumonia_resnet18.pt",
-            "../pneumonia_resnet18.pt",
-            "model.pth",
-            "pneumonia_model.pth"
-        ]:
-            if os.path.exists(path):
-                logger.info(f"Found model at {path}")
-                return load_model(path)
-        
-        # If still not found, log error and return None
-        logger.error("Model file not found!")
-        return None, None
-
-# Demo mode functions
-def demo_preprocess_image(image, options):
-    """Simulate preprocessing for demo mode"""
-    # Just return the original image and list of techniques
-    applied_techniques = []
-    
-    if options.get('clahe', False):
-        applied_techniques.append("CLAHE (Demo)")
-    if options.get('histogram_eq', False):
-        applied_techniques.append("Histogram Equalization (Demo)")
-    if options.get('denoising', False):
-        applied_techniques.append("Denoising (Demo)")
-    
-    return np.array(image), applied_techniques
-
-def demo_predict(image):
-    """Simulate prediction for demo mode"""
-    # Randomly decide if the image has pneumonia, slightly biased towards pneumonia
-    is_pneumonia = random.random() > 0.4
-    confidence = random.uniform(70, 98) if is_pneumonia else random.uniform(65, 95)
-    
-    return {
-        "prediction": "Pneumonia" if is_pneumonia else "Normal",
-        "probability": confidence,
-        "class_idx": 1 if is_pneumonia else 0
-    }
-
-def demo_gradcam(image):
-    """Create fake heatmap for demo mode"""
-    img_array = np.array(image)
-    h, w = img_array.shape[:2]
-    
-    # Create a fake heatmap with a central circular hotspot
-    y, x = np.ogrid[:h, :w]
-    center_y, center_x = h / 2, w / 2
-    
-    # Random offset for the hotspot
-    offset_x = random.uniform(-0.2, 0.2) * w
-    offset_y = random.uniform(-0.2, 0.2) * h
-    
-    # Create circular heatmap
-    mask = ((x - center_x - offset_x)**2 + (y - center_y - offset_y)**2) / (min(h, w)/2)**2
-    heatmap = 1 - np.clip(mask, 0, 1)
-    
-    # Add some random noise
-    heatmap += np.random.normal(0, 0.1, heatmap.shape)
-    heatmap = np.clip(heatmap, 0, 1)
-    
-    return img_array, heatmap
-
-def demo_overlay_gradcam(image, heatmap, alpha=0.4):
-    """Create a fake heatmap overlay for demo mode"""
-    # Convert to RGB if not already
-    if len(image.shape) == 2:
-        image = np.stack([image, image, image], axis=2)
-        
-    # Create a colormap for the heatmap (red is hot)
-    cmap = plt.cm.get_cmap('jet')
-    heatmap_colored = cmap(heatmap)[:, :, :3]  # Remove alpha channel
-    
-    # Convert to appropriate data type and scale
-    heatmap_colored = (heatmap_colored * 255).astype(np.uint8)
-    
-    # Blend the images
-    blended = image.copy().astype(np.float32)
-    for c in range(3):
-        blended[:, :, c] = image[:, :, c] * (1 - alpha * heatmap) + heatmap_colored[:, :, c] * (alpha * heatmap)
-    
-    return np.clip(blended, 0, 255).astype(np.uint8)
 
 if __name__ == "__main__":
-    main() 
+    main()
