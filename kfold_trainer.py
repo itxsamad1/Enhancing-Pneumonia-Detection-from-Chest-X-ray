@@ -73,10 +73,8 @@ LEARNING_RATE      = 0.001
 WEIGHT_DECAY       = 1e-4
 DROPOUT_RATE       = 0.3
 GRADIENT_CLIP      = 1.0
-# NOTE: num_workers > 0 causes Windows multiprocessing crash when DataLoaders
-# are recreated between folds. GPU is the bottleneck anyway, not data loading.
-NUM_WORKERS        = 0
-PIN_MEMORY         = False  # no benefit with num_workers=0
+NUM_WORKERS        = 4
+PIN_MEMORY         = True
 RANDOM_STATE       = 42
 
 torch.backends.cudnn.benchmark = True
