@@ -22,12 +22,15 @@ import torch.optim as optim
 from torch.utils.data import DataLoader, Dataset
 from torchvision.models import (
     resnet18, ResNet18_Weights,
+    resnet50, ResNet50_Weights,
     densenet121, DenseNet121_Weights,
     vgg19, VGG19_Weights,
     mobilenet_v3_small, MobileNet_V3_Small_Weights,
-    efficientnet_b0, EfficientNet_B0_Weights
+    efficientnet_b0, EfficientNet_B0_Weights,
+    convnext_tiny, ConvNeXt_Tiny_Weights
 )
 import torchvision.transforms as transforms
+import timm
 from PIL import Image
 from tqdm import tqdm
 import matplotlib
@@ -40,8 +43,8 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 sys.stderr.reconfigure(encoding="utf-8", errors="replace")
 
 # ─── Configuration ───────────────────────────────────────────────
-NUM_EPOCHS = 30
-EARLY_STOPPING_PATIENCE = 5
+NUM_EPOCHS = 100
+EARLY_STOPPING_PATIENCE = 10
 BATCH_SIZE = 64
 LEARNING_RATE = 0.001
 WEIGHT_DECAY = 1e-4
@@ -91,6 +94,30 @@ def get_model(model_name):
         num_ftrs = model.classifier[1].in_features
         model.classifier[1] = nn.Sequential(nn.Dropout(p=DROPOUT_RATE), nn.Linear(num_ftrs, 2))
         return model, "pneumonia_efficientnet_b0.pt"
+        
+    elif model_name == "resnet50":
+        model = resnet50(weights=ResNet50_Weights.IMAGENET1K_V1)
+        num_ftrs = model.fc.in_features
+        model.fc = nn.Sequential(nn.Dropout(p=DROPOUT_RATE), nn.Linear(num_ftrs, 2))
+        return model, "pneumonia_resnet50.pt"
+
+    elif model_name == "convnext_tiny":
+        model = convnext_tiny(weights=ConvNeXt_Tiny_Weights.IMAGENET1K_V1)
+        num_ftrs = model.classifier[2].in_features
+        model.classifier[2] = nn.Sequential(nn.Dropout(p=DROPOUT_RATE), nn.Linear(num_ftrs, 2))
+        return model, "pneumonia_convnext_tiny.pt"
+        
+    elif model_name == "deit_tiny":
+        model = timm.create_model('deit_tiny_patch16_224', pretrained=True, num_classes=2)
+        return model, "pneumonia_deit_tiny.pt"
+        
+    elif model_name == "swin_tiny":
+        model = timm.create_model('swin_tiny_patch4_window7_224', pretrained=True, num_classes=2)
+        return model, "pneumonia_swin_tiny.pt"
+        
+    elif model_name == "vit_b_16":
+        model = timm.create_model('vit_base_patch16_224', pretrained=True, num_classes=2)
+        return model, "pneumonia_vit_b_16.pt"
         
     else:
         raise ValueError(f"Model {model_name} not supported.")
@@ -228,11 +255,11 @@ def plot_confusion_mat(y_true, y_pred, save_dir):
 # ─── Main ────────────────────────────────────────────────────────
 def main():
     parser = argparse.ArgumentParser(description="Multi-Model Pneumonia Detection Training")
-    parser.add_argument("--model", type=str, required=True, choices=["resnet18", "densenet121", "vgg19", "mobilenetv3", "efficientnetb0"])
+    parser.add_argument("--model", type=str, required=True, choices=["resnet18", "resnet50", "densenet121", "vgg19", "mobilenetv3", "efficientnetb0", "convnext_tiny", "deit_tiny", "swin_tiny", "vit_b_16"])
     args = parser.parse_args()
     
     print("=" * 60)
-    print(f"Pneumonia Detection — Training {args.model.upper()} (RP1 - Patience=5)")
+    print(f"Pneumonia Detection — Training {args.model.upper()} (RP2 - Patience={EARLY_STOPPING_PATIENCE})")
     print("=" * 60)
     
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
