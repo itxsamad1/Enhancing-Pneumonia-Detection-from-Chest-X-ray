@@ -73,7 +73,7 @@ LEARNING_RATE      = 0.001
 WEIGHT_DECAY       = 1e-4
 DROPOUT_RATE       = 0.3
 GRADIENT_CLIP      = 1.0
-NUM_WORKERS        = 4
+NUM_WORKERS        = 4    # Set to 0 on Windows to avoid multiprocessing crash
 PIN_MEMORY         = True
 RANDOM_STATE       = 42
 
@@ -454,7 +454,7 @@ def run_mcnemar(results: dict):
                 "model_b": MODEL_REGISTRY.get(k2, k2),
                 "b": int(b), "c": int(c),
                 "p_value": round(float(p_value), 6),
-                "significant": p_value < 0.05,
+                "significant": bool(p_value < 0.05),
             }
 
     results["mcnemar"] = mcnemar_results
