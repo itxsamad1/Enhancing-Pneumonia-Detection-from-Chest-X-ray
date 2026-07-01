@@ -48,4 +48,9 @@ ENV/
 
 # Misc
 .DS_Store
-Thumbs.db 
+Thumbs.db
+
+# Ignored datasets and large temp files
+raw_datasets/
+dataset_augmented/
+zip_contents.txt
