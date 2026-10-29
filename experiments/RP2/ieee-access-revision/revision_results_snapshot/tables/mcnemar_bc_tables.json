@@ -1,0 +1,98 @@
+{
+  "efficientnetb0_vs_resnet18": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "ResNet-18",
+    "b": 1149,
+    "c": 998,
+    "p_value": 0.001207,
+    "significant": true
+  },
+  "efficientnetb0_vs_resnet50": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "ResNet-50",
+    "b": 1320,
+    "c": 1065,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "efficientnetb0_vs_densenet121": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "DenseNet-121",
+    "b": 1128,
+    "c": 970,
+    "p_value": 0.000609,
+    "significant": true
+  },
+  "efficientnetb0_vs_vgg19": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "VGG-19",
+    "b": 5071,
+    "c": 1334,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "efficientnetb0_vs_mobilenetv3": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "MobileNetV3-Small",
+    "b": 1055,
+    "c": 926,
+    "p_value": 0.004029,
+    "significant": true
+  },
+  "efficientnetb0_vs_convnext_tiny": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "ConvNeXt-Tiny",
+    "b": 2009,
+    "c": 1151,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "efficientnetb0_vs_deit_tiny": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "DeiT-Tiny",
+    "b": 2221,
+    "c": 1233,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "efficientnetb0_vs_swin_tiny": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "Swin-Tiny",
+    "b": 4520,
+    "c": 1335,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "efficientnetb0_vs_vit_b_16": {
+    "model_a": "EfficientNet-B0",
+    "model_b": "ViT-B/16",
+    "b": 3056,
+    "c": 1304,
+    "p_value": 0.0,
+    "significant": true
+  },
+  "resnet18_vs_densenet121": {
+    "model_a": "ResNet-18",
+    "model_b": "DenseNet-121",
+    "b": 919,
+    "c": 912,
+    "p_value": 0.888487,
+    "significant": false
+  },
+  "resnet18_vs_mobilenetv3": {
+    "model_a": "ResNet-18",
+    "model_b": "MobileNetV3-Small",
+    "b": 1033,
+    "c": 1055,
+    "p_value": 0.645823,
+    "significant": false
+  },
+  "densenet121_vs_mobilenetv3": {
+    "model_a": "DenseNet-121",
+    "model_b": "MobileNetV3-Small",
+    "b": 1008,
+    "c": 1037,
+    "p_value": 0.535803,
+    "significant": false
+  }
+}

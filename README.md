@@ -171,6 +171,17 @@ The app will be available at:
 
 ---
 
+## 🧪 Experiments (RP1 / RP2)
+
+Archived research-paper experiment snapshots (by branch) live under **[`experiments/`](experiments/)** so the root project look stays clean:
+
+- **RP1** — architecture trainings (ResNet-18, DenseNet-121, VGG-19, MobileNetV3, EfficientNet-B0)
+- **RP2** — augmentation, anti-overfitting ResNet-18, reporting, and **IEEE Access revision** work
+
+See [`experiments/README.md`](experiments/README.md). Original experiment branches were kept (not deleted).
+
+---
+
 ## ⚖️ License
 This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 

@@ -1,0 +1,73 @@
+{
+  "best2": [
+    "low_lr_warmup",
+    "baseline"
+  ],
+  "ranked": [
+    {
+      "strategy": "low_lr_warmup",
+      "score": 1.4068,
+      "means": {
+        "f1": 0.7816,
+        "auc": 0.9336,
+        "bal": 0.8359,
+        "mcc": 0.6907,
+        "rec": 0.7473,
+        "acc": 0.8687
+      },
+      "collapsed_folds": 0
+    },
+    {
+      "strategy": "baseline",
+      "score": 0.7354,
+      "means": {
+        "f1": 0.5006,
+        "auc": 0.785,
+        "bal": 0.7083,
+        "mcc": 0.4355,
+        "rec": 0.4659,
+        "acc": 0.7981
+      },
+      "collapsed_folds": 5
+    },
+    {
+      "strategy": "oversample",
+      "score": 0.6058,
+      "means": {
+        "f1": 0.4478,
+        "auc": 0.7641,
+        "bal": 0.69,
+        "mcc": 0.3765,
+        "rec": 0.457,
+        "acc": 0.7763
+      },
+      "collapsed_folds": 6
+    },
+    {
+      "strategy": "weighted_ce",
+      "score": 0.3718,
+      "means": {
+        "f1": 0.3546,
+        "auc": 0.6822,
+        "bal": 0.6524,
+        "mcc": 0.3034,
+        "rec": 0.3585,
+        "acc": 0.7612
+      },
+      "collapsed_folds": 8
+    },
+    {
+      "strategy": "focal",
+      "score": 0.3587,
+      "means": {
+        "f1": 0.3468,
+        "auc": 0.6918,
+        "bal": 0.6432,
+        "mcc": 0.3011,
+        "rec": 0.32,
+        "acc": 0.7628
+      },
+      "collapsed_folds": 8
+    }
+  ]
+}

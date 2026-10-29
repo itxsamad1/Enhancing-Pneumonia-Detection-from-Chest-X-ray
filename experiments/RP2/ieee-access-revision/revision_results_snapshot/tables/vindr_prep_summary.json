@@ -1,0 +1,17 @@
+{
+  "root": "D:\\Enhancing-Pneumonia-Detection-from-Chest-X-ray\\raw_datasets\\vindr_cxr\\vinbigdata",
+  "n_images_annotated": 15000,
+  "n_main": 12194,
+  "n_negative_no_finding": 10606,
+  "n_positive_any": 1588,
+  "n_positive_majority": 838,
+  "n_hard_negatives": 2806,
+  "n_missing_files": 0,
+  "pneumonia_classes": [
+    "Consolidation",
+    "Infiltration",
+    "Lung Opacity"
+  ],
+  "manifest": "D:\\Enhancing-Pneumonia-Detection-from-Chest-X-ray\\revision_results\\vindr_manifest.csv",
+  "hard_negatives": "D:\\Enhancing-Pneumonia-Detection-from-Chest-X-ray\\revision_results\\vindr_hard_negatives.csv"
+}

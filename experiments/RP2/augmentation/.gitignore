@@ -1,0 +1,64 @@
+# Datasets
+dataset/
+dataset_augmented/
+raw_datasets/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual Environment
+venv/
+env/
+ENV/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Model files (too large for git)
+*.pt
+*.pth
+*.h5
+
+# Logs
+*.log
+
+# Local development
+.env
+.env.local
+.env.*.local
+
+# Graphs (generated during training)
+graphs/
+
+# Research paper
+*.docx
+
+# Test images
+normal.jpeg
+pneumonia.jpg
+
+# Misc
+.DS_Store
+Thumbs.db

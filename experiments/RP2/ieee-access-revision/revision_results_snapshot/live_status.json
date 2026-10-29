@@ -1,0 +1,289 @@
+{
+  "updated_at": "2026-10-30 01:11:01",
+  "phase": "grid3b (all-10 \u00d7 best-2: low_lr_warmup, baseline)",
+  "gpu_job_running": true,
+  "current": {
+    "architecture": "ResNet-18",
+    "model_key": "resnet18",
+    "strategy": "low_lr_warmup",
+    "fold": 5,
+    "epoch": 14,
+    "status": null,
+    "last_metrics": "Ep 14  TrainLoss=0.1768 Acc=0.9242  ValLoss=0.3902 Acc=0.8519  F1=0.7646 AUC=0.9151 Rec=0.7635 collapsed=False",
+    "last_line": "======================================================================",
+    "heartbeat_at": null
+  },
+  "progress": {
+    "folds_done": 45,
+    "folds_total": 100,
+    "jobs_done": 9,
+    "jobs_total": 20,
+    "percent": 45.0,
+    "avg_min_per_fold": 84.2,
+    "eta": "3 days, 5:11:00",
+    "elapsed_since_first_ckpt": "7 days, 9:00:18"
+  },
+  "recent_folds": [
+    {
+      "model": "ResNet-50",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_3",
+      "acc": 0.8632,
+      "f1": 0.7658,
+      "recall": 0.7105,
+      "collapsed": false
+    },
+    {
+      "model": "ResNet-50",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_4",
+      "acc": 0.866,
+      "f1": 0.7549,
+      "recall": 0.6548,
+      "collapsed": false
+    },
+    {
+      "model": "ResNet-50",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_5",
+      "acc": 0.8694,
+      "f1": 0.7835,
+      "recall": 0.7504,
+      "collapsed": false
+    },
+    {
+      "model": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_1",
+      "acc": 0.866,
+      "f1": 0.7899,
+      "recall": 0.7996,
+      "collapsed": false
+    },
+    {
+      "model": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_2",
+      "acc": 0.8678,
+      "f1": 0.7695,
+      "recall": 0.7009,
+      "collapsed": false
+    },
+    {
+      "model": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_3",
+      "acc": 0.8641,
+      "f1": 0.7712,
+      "recall": 0.7271,
+      "collapsed": false
+    },
+    {
+      "model": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_4",
+      "acc": 0.874,
+      "f1": 0.7884,
+      "recall": 0.7453,
+      "collapsed": false
+    },
+    {
+      "model": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "fold": "fold_5",
+      "acc": 0.8664,
+      "f1": 0.7848,
+      "recall": 0.7735,
+      "collapsed": false
+    }
+  ],
+  "queue": [
+    {
+      "model": "resnet18",
+      "display": "ResNet-18",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "resnet50",
+      "display": "ResNet-50",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "densenet121",
+      "display": "DenseNet-121",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "vgg19",
+      "display": "VGG-19",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "efficientnetb0",
+      "display": "EfficientNet-B0",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "mobilenetv3",
+      "display": "MobileNetV3",
+      "strategy": "low_lr_warmup",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "convnext_tiny",
+      "display": "ConvNeXt-Tiny",
+      "strategy": "low_lr_warmup",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "deit_tiny",
+      "display": "DeiT-Tiny",
+      "strategy": "low_lr_warmup",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "swin_tiny",
+      "display": "Swin-Tiny",
+      "strategy": "low_lr_warmup",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "vit_b_16",
+      "display": "ViT-B/16",
+      "strategy": "low_lr_warmup",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "resnet18",
+      "display": "ResNet-18",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "resnet50",
+      "display": "ResNet-50",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "densenet121",
+      "display": "DenseNet-121",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "vgg19",
+      "display": "VGG-19",
+      "strategy": "baseline",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 2
+    },
+    {
+      "model": "efficientnetb0",
+      "display": "EfficientNet-B0",
+      "strategy": "baseline",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 0
+    },
+    {
+      "model": "mobilenetv3",
+      "display": "MobileNetV3",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "convnext_tiny",
+      "display": "ConvNeXt-Tiny",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "deit_tiny",
+      "display": "DeiT-Tiny",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    },
+    {
+      "model": "swin_tiny",
+      "display": "Swin-Tiny",
+      "strategy": "baseline",
+      "folds_done": 5,
+      "folds_total": 5,
+      "state": "done",
+      "collapsed": 3
+    },
+    {
+      "model": "vit_b_16",
+      "display": "ViT-B/16",
+      "strategy": "baseline",
+      "folds_done": 0,
+      "folds_total": 5,
+      "state": "pending",
+      "collapsed": 0
+    }
+  ],
+  "log_file": "D:\\Enhancing-Pneumonia-Detection-from-Chest-X-ray\\revision_results\\queue_stdout.log",
+  "control": {
+    "state": "running",
+    "message": "started from dashboard",
+    "updated_at": "2026-10-30 01:11:00"
+  },
+  "trainer_alive": true
+}
